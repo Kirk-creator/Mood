@@ -198,6 +198,70 @@
   opacity: 0.45;
 }
 
+.scale-bubbles {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.scale-bubbles__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.scale-bubble {
+  width: 2.35rem;
+  height: 2.35rem;
+  border-radius: 999px;
+  border: 1.5px solid var(--border);
+  background: var(--surface-solid);
+  color: var(--ink-muted);
+  font-weight: 700;
+  font-family: var(--font-display);
+  font-size: 0.95rem;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease,
+    border-color 0.15s ease,
+    transform 0.15s ease;
+}
+
+.scale-bubble:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--bubble-accent, var(--accent)) 40%, white);
+  color: var(--ink);
+}
+
+.scale-bubble.is-active {
+  background: var(--bubble-accent, var(--accent));
+  border-color: var(--bubble-accent, var(--accent));
+  color: #f7faf8;
+  box-shadow: 0 6px 16px color-mix(in srgb, var(--bubble-accent, var(--accent)) 35%, transparent);
+}
+
+.inline-add-activity {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.45rem;
+  margin-top: 0.45rem;
+}
+
+.inline-add-activity input {
+  border: 1px solid var(--border);
+  background: var(--surface-solid);
+  border-radius: 10px;
+  padding: 0.45rem 0.65rem;
+  color: var(--ink);
+}
+
+@media (max-width: 780px) {
+  .scale-bubble {
+    width: 2.1rem;
+    height: 2.1rem;
+    font-size: 0.88rem;
+  }
+}
+
 .event-tags {
   margin-top: 0.9rem;
   display: grid;

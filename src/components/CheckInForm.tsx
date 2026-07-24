@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
+import confetti from 'canvas-confetti'
 import { v4 as uuidv4 } from 'uuid'
 import {
   emptyEntries,
@@ -12,9 +13,41 @@ import { CategorySlider } from './CategorySlider'
 interface CheckInFormProps {
   categories: CategoryConfig[]
   onSubmit: (checkIn: CheckIn) => void
+  onAddActivity: (categoryId: string, label: string) => string | null
 }
 
-export function CheckInForm({ categories, onSubmit }: CheckInFormProps) {
+function fireConfetti() {
+  const count = 140
+  const defaults = { origin: { y: 0.7 }, zIndex: 1000 }
+
+  confetti({
+    ...defaults,
+    particleCount: Math.floor(count * 0.45),
+    spread: 68,
+    startVelocity: 42,
+    colors: ['#2a9d8f', '#e76f51', '#457b9d', '#c9a227', '#ef476f'],
+  })
+  confetti({
+    ...defaults,
+    particleCount: Math.floor(count * 0.3),
+    angle: 60,
+    spread: 55,
+    origin: { x: 0, y: 0.75 },
+  })
+  confetti({
+    ...defaults,
+    particleCount: Math.floor(count * 0.3),
+    angle: 120,
+    spread: 55,
+    origin: { x: 1, y: 0.75 },
+  })
+}
+
+export function CheckInForm({
+  categories,
+  onSubmit,
+  onAddActivity,
+}: CheckInFormProps) {
   const [entries, setEntries] = useState(() => emptyEntries(categories))
   const [notes, setNotes] = useState('')
   const [savedFlash, setSavedFlash] = useState(false)
@@ -55,6 +88,7 @@ export function CheckInForm({ categories, onSubmit }: CheckInFormProps) {
       entries: clean,
     })
 
+    fireConfetti()
     setEntries(emptyEntries(categories))
     setNotes('')
     setSavedFlash(true)
@@ -69,8 +103,8 @@ export function CheckInForm({ categories, onSubmit }: CheckInFormProps) {
         <div>
           <h2>New check-in</h2>
           <p>
-            Rate what you want, tap activities, add notes. Nothing is required —
-            save when you have something to log.
+            Tap a rating bubble, add activities right on each category, and save
+            when you have something to log.
           </p>
         </div>
         {savedFlash && (
@@ -87,6 +121,7 @@ export function CheckInForm({ categories, onSubmit }: CheckInFormProps) {
             category={cat}
             entry={entries[cat.id] ?? emptyEntryFallback()}
             onChange={(entry) => updateEntry(cat.id, entry)}
+            onAddActivity={onAddActivity}
           />
         ))}
       </div>
