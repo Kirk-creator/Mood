@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react'
 import { v4 as uuidv4 } from 'uuid'
+import { nextActivityColor } from './chartUtils'
 import { CheckInForm } from './components/CheckInForm'
 import { Dashboard } from './components/Dashboard'
 import { HistoryList } from './components/HistoryList'
@@ -30,7 +31,10 @@ export default function App() {
         }
         return {
           ...cat,
-          activities: [...cat.activities, { id, label: trimmed }],
+          activities: [
+            ...cat.activities,
+            { id, label: trimmed, color: nextActivityColor(cat.activities.length) },
+          ],
         }
       })
       const target = nextCategories.find((c) => c.id === categoryId)

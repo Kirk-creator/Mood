@@ -218,7 +218,11 @@ export function Dashboard({ checkIns, categories }: DashboardProps) {
                       ? ({ '--chip-accent': act.color } as CSSProperties)
                       : undefined
                   }
-                  onClick={() => setSelectedActivityId(act.id)}
+                  onClick={() =>
+                    setSelectedActivityId((prev) =>
+                      prev === act.id ? null : act.id,
+                    )
+                  }
                   aria-pressed={selectedActivityId === act.id}
                 >
                   <span

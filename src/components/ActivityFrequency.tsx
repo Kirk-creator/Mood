@@ -3,13 +3,14 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
+  Legend,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from 'recharts'
 import {
-  activityFrequency,
+  activityFrequencySeries,
   type FlatActivity,
   type FrequencyGranularity,
 } from '../chartUtils'
@@ -29,31 +30,45 @@ const GRANULARITIES: Array<[FrequencyGranularity, string]> = [
 
 export function ActivityFrequency({ checkIns, activities }: ActivityFrequencyProps) {
   const [granularity, setGranularity] = useState<FrequencyGranularity>('hour')
-  const [selectedId, setSelectedId] = useState<string>('all')
+  /** Activities hidden from the stacked chart; everything else is shown. */
+  const [hiddenIds, setHiddenIds] = useState<Record<string, boolean>>({})
 
-  const selected = activities.find((a) => a.id === selectedId) ?? null
-  const activityIds = useMemo(
-    () =>
-      selected
-        ? new Set([selected.id])
-        : new Set(activities.map((a) => a.id)),
-    [selected, activities],
+  const visibleActivities = useMemo(
+    () => activities.filter((a) => !hiddenIds[a.id]),
+    [activities, hiddenIds],
   )
 
   const data = useMemo(
-    () => activityFrequency(checkIns, granularity, activityIds),
-    [checkIns, granularity, activityIds],
+    () =>
+      activityFrequencySeries(
+        checkIns,
+        granularity,
+        visibleActivities.map((a) => a.id),
+      ),
+    [checkIns, granularity, visibleActivities],
   )
 
-  const total = data.reduce((sum, bucket) => sum + bucket.count, 0)
-  const barColor = selected?.color ?? '#1f6f5b'
+  const total = useMemo(() => {
+    let sum = 0
+    for (const row of data) {
+      for (const act of visibleActivities) sum += row[act.id] as number
+    }
+    return sum
+  }, [data, visibleActivities])
+
+  function toggleActivity(id: string) {
+    setHiddenIds((prev) => ({ ...prev, [id]: !prev[id] }))
+  }
 
   return (
     <section className="frequency">
       <header className="panel-header">
         <div>
           <h2>Activity frequency</h2>
-          <p>How often activities are logged, grouped by time.</p>
+          <p>
+            How often each activity is logged — stacked by color so you can compare
+            them at a glance.
+          </p>
         </div>
       </header>
 
@@ -67,37 +82,32 @@ export function ActivityFrequency({ checkIns, activities }: ActivityFrequencyPro
         <>
           <div className="filters">
             <div className="filter-group">
-              <span className="filter-label">Activity</span>
+              <span className="filter-label">Activities</span>
               <div className="chip-row">
-                <button
-                  type="button"
-                  className={`chip ${selectedId === 'all' ? 'is-active' : ''}`}
-                  onClick={() => setSelectedId('all')}
-                  aria-pressed={selectedId === 'all'}
-                >
-                  All activities
-                </button>
-                {activities.map((act) => (
-                  <button
-                    key={act.id}
-                    type="button"
-                    className={`chip ${selectedId === act.id ? 'is-active' : ''}`}
-                    style={
-                      selectedId === act.id
-                        ? ({ '--chip-accent': act.color } as CSSProperties)
-                        : undefined
-                    }
-                    onClick={() => setSelectedId(act.id)}
-                    aria-pressed={selectedId === act.id}
-                  >
-                    <span
-                      className="chip-dot"
-                      style={{ background: act.color }}
-                      aria-hidden
-                    />
-                    {act.categoryLabel}: {act.label}
-                  </button>
-                ))}
+                {activities.map((act) => {
+                  const active = !hiddenIds[act.id]
+                  return (
+                    <button
+                      key={act.id}
+                      type="button"
+                      className={`chip ${active ? 'is-active' : ''}`}
+                      style={
+                        active
+                          ? ({ '--chip-accent': act.color } as CSSProperties)
+                          : undefined
+                      }
+                      onClick={() => toggleActivity(act.id)}
+                      aria-pressed={active}
+                    >
+                      <span
+                        className="chip-dot"
+                        style={{ background: act.color }}
+                        aria-hidden
+                      />
+                      {act.categoryLabel}: {act.label}
+                    </button>
+                  )
+                })}
               </div>
             </div>
 
@@ -120,12 +130,12 @@ export function ActivityFrequency({ checkIns, activities }: ActivityFrequencyPro
           </div>
 
           <div className="chart-shell">
-            {total === 0 ? (
+            {visibleActivities.length === 0 || total === 0 ? (
               <div className="empty-state">
                 <p>
-                  {selected
-                    ? `“${selected.label}” has not been logged in this date range.`
-                    : 'No activities logged in this date range.'}
+                  {visibleActivities.length === 0
+                    ? 'Select at least one activity to plot.'
+                    : 'No selected activities logged in this date range.'}
                 </p>
               </div>
             ) : (
@@ -156,13 +166,22 @@ export function ActivityFrequency({ checkIns, activities }: ActivityFrequencyPro
                       boxShadow: '0 8px 24px rgba(20, 40, 32, 0.08)',
                     }}
                   />
-                  <Bar
-                    dataKey="count"
-                    name={selected ? selected.label : 'All activities'}
-                    fill={barColor}
-                    radius={[6, 6, 0, 0]}
-                    maxBarSize={44}
-                  />
+                  <Legend />
+                  {visibleActivities.map((act, index) => (
+                    <Bar
+                      key={act.id}
+                      dataKey={act.id}
+                      name={`${act.categoryLabel}: ${act.label}`}
+                      stackId="activities"
+                      fill={act.color}
+                      radius={
+                        index === visibleActivities.length - 1
+                          ? [6, 6, 0, 0]
+                          : [0, 0, 0, 0]
+                      }
+                      maxBarSize={44}
+                    />
+                  ))}
                 </BarChart>
               </ResponsiveContainer>
             )}
@@ -170,7 +189,9 @@ export function ActivityFrequency({ checkIns, activities }: ActivityFrequencyPro
 
           <p className="chart-meta">
             {total} log{total === 1 ? '' : 's'}
-            {selected ? ` of ${selected.label}` : ' across all activities'}
+            {visibleActivities.length === activities.length
+              ? ' across all activities'
+              : ` across ${visibleActivities.length} activit${visibleActivities.length === 1 ? 'y' : 'ies'}`}
           </p>
         </>
       )}

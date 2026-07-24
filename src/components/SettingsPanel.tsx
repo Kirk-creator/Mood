@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { v4 as uuidv4 } from 'uuid'
+import { nextActivityColor } from '../chartUtils'
 import type { ActivityTag, AppSettings, CategoryConfig } from '../types'
 
 interface SettingsPanelProps {
@@ -95,7 +96,13 @@ export function SettingsPanel({ settings, onChange }: SettingsPanelProps) {
     e.preventDefault()
     const label = (newActivityLabel[categoryId] ?? '').trim()
     if (!label) return
-    const tag: ActivityTag = { id: uuidv4(), label }
+    const tag: ActivityTag = {
+      id: uuidv4(),
+      label,
+      color: nextActivityColor(
+        settings.categories.find((c) => c.id === categoryId)?.activities.length ?? 0,
+      ),
+    }
     updateCategories(
       settings.categories.map((c) =>
         c.id === categoryId ? { ...c, activities: [...c.activities, tag] } : c,

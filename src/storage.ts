@@ -126,7 +126,11 @@ function normalizeActivityTag(raw: unknown): ActivityTag | null {
   if (typeof raw.id !== 'string' || typeof raw.label !== 'string') return null
   const label = raw.label.trim()
   if (!label) return null
-  return { id: raw.id, label }
+  return {
+    id: raw.id,
+    label,
+    color: typeof raw.color === 'string' ? raw.color : undefined,
+  }
 }
 
 function normalizeCategory(raw: unknown): CategoryConfig | null {
