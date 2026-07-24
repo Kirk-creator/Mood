@@ -34,7 +34,7 @@ jobs:
         run: npm run build
         env:
           # Matches https://<user>.github.io/<repo>/
-          VITE_BASE_PATH: /mood/
+          VITE_BASE_PATH: /Mood/
 
       - name: Setup Pages
         uses: actions/configure-pages@v5

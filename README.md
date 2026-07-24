@@ -34,7 +34,7 @@ npm run build
 npm run preview
 ```
 
-The Vite `base` path defaults to `/mood/` for GitHub Pages (`https://<user>.github.io/mood/`). For local root hosting or a custom domain:
+The Vite `base` path defaults to `/Mood/` for GitHub Pages (`https://<user>.github.io/Mood/`). For local root hosting or a custom domain:
 
 ```bash
 VITE_BASE_PATH=/ npm run build
