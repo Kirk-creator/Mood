@@ -1,42 +1,48 @@
 import type { CSSProperties } from 'react'
-import type { CategoryKey, CategoryRating } from '../types'
-import { CATEGORY_MAP } from '../constants'
+import type { CategoryConfig, CategoryEntry } from '../types'
 
 interface CategorySliderProps {
-  categoryKey: CategoryKey
-  rating: CategoryRating
-  onChange: (rating: CategoryRating) => void
+  category: CategoryConfig
+  entry: CategoryEntry
+  onChange: (entry: CategoryEntry) => void
 }
 
-export function CategorySlider({
-  categoryKey,
-  rating,
-  onChange,
-}: CategorySliderProps) {
-  const meta = CATEGORY_MAP[categoryKey]
-  const skipped = rating.value === null
+export function CategorySlider({ category, entry, onChange }: CategorySliderProps) {
+  const skipped = entry.value === null
 
   function setValue(value: number | null) {
-    onChange({ ...rating, value })
+    onChange({ ...entry, value })
   }
 
   function setNotes(notes: string) {
-    onChange({ ...rating, notes })
+    onChange({ ...entry, notes })
+  }
+
+  function toggleEvent(eventId: string) {
+    const has = entry.eventIds.includes(eventId)
+    onChange({
+      ...entry,
+      eventIds: has
+        ? entry.eventIds.filter((id) => id !== eventId)
+        : [...entry.eventIds, eventId],
+    })
   }
 
   return (
-    <section className="category-card" data-category={categoryKey}>
+    <section className="category-card" data-category={category.id}>
       <header className="category-card__header">
         <div>
           <h3 className="category-card__title">
             <span
               className="category-card__swatch"
-              style={{ background: meta.color }}
+              style={{ background: category.color }}
               aria-hidden
             />
-            {meta.label}
+            {category.label}
           </h3>
-          <p className="category-card__desc">{meta.description}</p>
+          {category.description ? (
+            <p className="category-card__desc">{category.description}</p>
+          ) : null}
         </div>
         <label className="skip-toggle">
           <input
@@ -44,14 +50,14 @@ export function CategorySlider({
             checked={skipped}
             onChange={(e) => setValue(e.target.checked ? null : 5)}
           />
-          <span>Skip</span>
+          <span>Skip rating</span>
         </label>
       </header>
 
-      <div className={`category-card__body ${skipped ? 'is-skipped' : ''}`}>
-        <div className="slider-row">
+      <div className={`category-card__body ${skipped ? 'is-skipped-rating' : ''}`}>
+        <div className={`slider-row ${skipped ? 'is-disabled' : ''}`}>
           <div className="slider-value" aria-live="polite">
-            {skipped ? '—' : rating.value}
+            {skipped ? '—' : entry.value}
           </div>
           <div className="slider-controls">
             <input
@@ -60,18 +66,14 @@ export function CategorySlider({
               max={10}
               step={1}
               disabled={skipped}
-              value={rating.value ?? 5}
+              value={entry.value ?? 5}
               onChange={(e) => setValue(Number(e.target.value))}
-              aria-label={`${meta.label} rating`}
-style={
-                  {
-                    '--track-color': meta.color,
-                  } as CSSProperties
-                }
+              aria-label={`${category.label} rating`}
+              style={{ '--track-color': category.color } as CSSProperties}
             />
             <div className="slider-labels">
-              <span>{meta.lowLabel}</span>
-              <span>{meta.highLabel}</span>
+              <span>{category.lowLabel}</span>
+              <span>{category.highLabel}</span>
             </div>
           </div>
           <input
@@ -80,7 +82,7 @@ style={
             min={1}
             max={10}
             disabled={skipped}
-            value={rating.value ?? ''}
+            value={entry.value ?? ''}
             placeholder="—"
             onChange={(e) => {
               const raw = e.target.value
@@ -92,18 +94,44 @@ style={
               if (Number.isNaN(n)) return
               setValue(Math.min(10, Math.max(1, Math.round(n))))
             }}
-            aria-label={`${meta.label} number input`}
+            aria-label={`${category.label} number input`}
           />
         </div>
+
+        {category.eventTags.length > 0 && (
+          <div className="event-tags">
+            <span className="event-tags__label">Events</span>
+            <div className="event-tag-row">
+              {category.eventTags.map((tag) => {
+                const active = entry.eventIds.includes(tag.id)
+                return (
+                  <button
+                    key={tag.id}
+                    type="button"
+                    className={`event-tag ${active ? 'is-active' : ''}`}
+                    style={
+                      active
+                        ? ({ '--tag-accent': category.color } as CSSProperties)
+                        : undefined
+                    }
+                    aria-pressed={active}
+                    onClick={() => toggleEvent(tag.id)}
+                  >
+                    {tag.label}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        )}
 
         <label className="notes-field">
           <span>Notes (optional)</span>
           <textarea
             rows={2}
-            disabled={skipped}
-            value={rating.notes}
+            value={entry.notes}
             onChange={(e) => setNotes(e.target.value)}
-            placeholder={`Anything about your ${meta.shortLabel.toLowerCase()}…`}
+            placeholder={`Anything about ${category.label.toLowerCase()}…`}
           />
         </label>
       </div>
