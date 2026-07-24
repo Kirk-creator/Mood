@@ -1,6 +1,8 @@
 export interface ActivityTag {
   id: string
   label: string
+  /** Distinct color for charts; falls back to a palette hash if missing */
+  color?: string
 }
 
 export interface CategoryConfig {

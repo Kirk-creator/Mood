@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { v4 as uuidv4 } from 'uuid'
+import { nextActivityColor } from '../chartUtils'
 import type { ActivityTag, AppSettings, CategoryConfig } from '../types'
 
 interface SettingsPanelProps {
@@ -95,7 +96,13 @@ export function SettingsPanel({ settings, onChange }: SettingsPanelProps) {
     e.preventDefault()
     const label = (newActivityLabel[categoryId] ?? '').trim()
     if (!label) return
-    const tag: ActivityTag = { id: uuidv4(), label }
+    const tag: ActivityTag = {
+      id: uuidv4(),
+      label,
+      color: nextActivityColor(
+        settings.categories.find((c) => c.id === categoryId)?.activities.length ?? 0,
+      ),
+    }
     updateCategories(
       settings.categories.map((c) =>
         c.id === categoryId ? { ...c, activities: [...c.activities, tag] } : c,
@@ -111,6 +118,22 @@ export function SettingsPanel({ settings, onChange }: SettingsPanelProps) {
           ? { ...c, activities: c.activities.filter((t) => t.id !== activityId) }
           : c,
       ),
+    )
+  }
+
+  function moveActivity(categoryId: string, index: number, direction: -1 | 1) {
+    updateCategories(
+      settings.categories.map((c) => {
+        if (c.id !== categoryId) return c
+        const target = index + direction
+        if (target < 0 || target >= c.activities.length) return c
+        const activities = [...c.activities]
+        ;[activities[index], activities[target]] = [
+          activities[target],
+          activities[index],
+        ]
+        return { ...c, activities }
+      }),
     )
   }
 
@@ -135,8 +158,8 @@ export function SettingsPanel({ settings, onChange }: SettingsPanelProps) {
         <div>
           <h2>Settings</h2>
           <p>
-            Add or remove categories, toggle 1–10 scales, pick colors, and manage
-            activity buttons.
+            Add or remove categories, toggle 1–10 scales, pick colors, and reorder
+            activities.
           </p>
         </div>
       </header>
@@ -239,11 +262,11 @@ export function SettingsPanel({ settings, onChange }: SettingsPanelProps) {
                 </p>
               ) : (
                 <ul className="settings-event-list">
-                  {cat.activities.map((tag) => (
+                  {cat.activities.map((tag, actIndex) => (
                     <li key={tag.id} className="settings-event-row">
                       <span
                         className="chip-dot"
-                        style={{ background: cat.color }}
+                        style={{ background: tag.color || cat.color }}
                         aria-hidden
                       />
                       <input
@@ -253,13 +276,33 @@ export function SettingsPanel({ settings, onChange }: SettingsPanelProps) {
                         }
                         aria-label="Activity name"
                       />
-                      <button
-                        type="button"
-                        className="btn btn-danger btn-sm"
-                        onClick={() => removeActivity(cat.id, tag.id)}
-                      >
-                        Remove
-                      </button>
+                      <div className="settings-item__order">
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-sm"
+                          disabled={actIndex === 0}
+                          onClick={() => moveActivity(cat.id, actIndex, -1)}
+                          aria-label={`Move ${tag.label} up`}
+                        >
+                          ↑
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-sm"
+                          disabled={actIndex === cat.activities.length - 1}
+                          onClick={() => moveActivity(cat.id, actIndex, 1)}
+                          aria-label={`Move ${tag.label} down`}
+                        >
+                          ↓
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-danger btn-sm"
+                          onClick={() => removeActivity(cat.id, tag.id)}
+                        >
+                          Remove
+                        </button>
+                      </div>
                     </li>
                   ))}
                 </ul>
