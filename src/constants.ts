@@ -13,7 +13,8 @@ export const DEFAULT_CATEGORIES: CategoryConfig[] = [
     description: 'How you feel emotionally',
     lowLabel: 'Low',
     highLabel: 'Great',
-    eventTags: [],
+    hasScale: true,
+    activities: [],
   },
   {
     id: 'exercise',
@@ -22,7 +23,8 @@ export const DEFAULT_CATEGORIES: CategoryConfig[] = [
     description: 'Physical activity level',
     lowLabel: 'Sedentary',
     highLabel: 'Very active',
-    eventTags: [],
+    hasScale: true,
+    activities: [],
   },
   {
     id: 'wellbeing',
@@ -31,7 +33,8 @@ export const DEFAULT_CATEGORIES: CategoryConfig[] = [
     description: 'How your body feels overall',
     lowLabel: 'Unwell',
     highLabel: 'Vibrant',
-    eventTags: [],
+    hasScale: true,
+    activities: [],
   },
   {
     id: 'energy',
@@ -40,7 +43,8 @@ export const DEFAULT_CATEGORIES: CategoryConfig[] = [
     description: 'Energy and alertness',
     lowLabel: 'Drained',
     highLabel: 'Energized',
-    eventTags: [],
+    hasScale: true,
+    activities: [],
   },
   {
     id: 'food',
@@ -49,7 +53,8 @@ export const DEFAULT_CATEGORIES: CategoryConfig[] = [
     description: 'Eating and nutrition',
     lowLabel: 'Poor',
     highLabel: 'Nourished',
-    eventTags: [],
+    hasScale: true,
+    activities: [],
   },
   {
     id: 'social',
@@ -58,7 +63,8 @@ export const DEFAULT_CATEGORIES: CategoryConfig[] = [
     description: 'Connection with others',
     lowLabel: 'Isolated',
     highLabel: 'Connected',
-    eventTags: [],
+    hasScale: true,
+    activities: [],
   },
   {
     id: 'health',
@@ -67,7 +73,8 @@ export const DEFAULT_CATEGORIES: CategoryConfig[] = [
     description: 'Health symptoms and status',
     lowLabel: 'Struggling',
     highLabel: 'Healthy',
-    eventTags: [],
+    hasScale: true,
+    activities: [],
   },
   {
     id: 'hobbies',
@@ -76,7 +83,8 @@ export const DEFAULT_CATEGORIES: CategoryConfig[] = [
     description: 'Leisure and creative time',
     lowLabel: 'None',
     highLabel: 'Engaged',
-    eventTags: [],
+    hasScale: true,
+    activities: [],
   },
   {
     id: 'events',
@@ -85,7 +93,8 @@ export const DEFAULT_CATEGORIES: CategoryConfig[] = [
     description: 'Notable things that happened',
     lowLabel: 'Quiet',
     highLabel: 'Busy',
-    eventTags: [],
+    hasScale: true,
+    activities: [],
   },
   {
     id: 'sleep',
@@ -94,7 +103,8 @@ export const DEFAULT_CATEGORIES: CategoryConfig[] = [
     description: 'Rest and sleep quality',
     lowLabel: 'Restless',
     highLabel: 'Rested',
-    eventTags: [],
+    hasScale: true,
+    activities: [],
   },
   {
     id: 'weather',
@@ -103,7 +113,8 @@ export const DEFAULT_CATEGORIES: CategoryConfig[] = [
     description: 'How weather affected you',
     lowLabel: 'Harsh',
     highLabel: 'Pleasant',
-    eventTags: [],
+    hasScale: true,
+    activities: [],
   },
   {
     id: 'other',
@@ -112,10 +123,16 @@ export const DEFAULT_CATEGORIES: CategoryConfig[] = [
     description: 'Anything else worth tracking',
     lowLabel: 'Low',
     highLabel: 'High',
-    eventTags: [],
+    hasScale: true,
+    activities: [],
   },
 ]
 
 export function defaultSettings(): AppSettings {
-  return { categories: DEFAULT_CATEGORIES.map((c) => ({ ...c, eventTags: [] })) }
+  return {
+    categories: DEFAULT_CATEGORIES.map((c) => ({
+      ...c,
+      activities: [],
+    })),
+  }
 }

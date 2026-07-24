@@ -71,14 +71,11 @@ export function HistoryList({
                 {categories.map((cat) => {
                   const entry = item.entries[cat.id]
                   if (!entry) return null
-                  const hasContent =
-                    entry.value !== null ||
-                    entry.eventIds.length > 0 ||
-                    entry.notes.trim()
-                  if (!hasContent) return null
-                  const eventLabels = entry.eventIds
-                    .map((id) => cat.eventTags.find((t) => t.id === id)?.label)
+                  const activityLabels = entry.activityIds
+                    .map((id) => cat.activities.find((t) => t.id === id)?.label)
                     .filter(Boolean)
+                  const showValue = cat.hasScale && entry.value !== null
+                  if (!showValue && activityLabels.length === 0) return null
                   return (
                     <div key={cat.id} className="history-rating">
                       <span
@@ -87,24 +84,19 @@ export function HistoryList({
                         aria-hidden
                       />
                       <span className="history-rating__label">{cat.label}</span>
-                      <strong>{entry.value ?? '—'}</strong>
-                      <span className="history-rating__notes">
-                        {eventLabels.length > 0 && (
+                      <strong>{showValue ? entry.value : '—'}</strong>
+                      {activityLabels.length > 0 ? (
+                        <span className="history-rating__notes">
                           <span className="history-events">
-                            {eventLabels.join(' · ')}
+                            {activityLabels.join(' · ')}
                           </span>
-                        )}
-                        {entry.notes ? (
-                          <span title={entry.notes}>
-                            {eventLabels.length > 0 ? ' — ' : ''}
-                            {entry.notes}
-                          </span>
-                        ) : null}
-                      </span>
+                        </span>
+                      ) : (
+                        <span />
+                      )}
                     </div>
                   )
                 })}
-                {/* Orphaned entries from removed categories */}
                 {Object.entries(item.entries)
                   .filter(([id]) => !categoryMap[id])
                   .map(([id, entry]) => (
@@ -115,6 +107,9 @@ export function HistoryList({
                     </div>
                   ))}
               </div>
+              {item.notes ? (
+                <p className="history-checkin-notes">{item.notes}</p>
+              ) : null}
             </li>
           ))}
         </ul>
@@ -146,11 +141,15 @@ function EditModal({ checkIn, categories, onClose, onSave }: EditModalProps) {
   const [timestamp, setTimestamp] = useState(
     format(parseISO(checkIn.timestamp), "yyyy-MM-dd'T'HH:mm"),
   )
+  const [notes, setNotes] = useState(checkIn.notes ?? '')
   const [entries, setEntries] = useState<Record<string, CategoryEntry>>(() => {
     const base = emptyEntries(categories)
     for (const cat of categories) {
       if (checkIn.entries[cat.id]) {
-        base[cat.id] = structuredClone(checkIn.entries[cat.id])
+        base[cat.id] = {
+          value: checkIn.entries[cat.id].value,
+          activityIds: [...checkIn.entries[cat.id].activityIds],
+        }
       }
     }
     return base
@@ -162,32 +161,24 @@ function EditModal({ checkIn, categories, onClose, onSave }: EditModalProps) {
 
   function handleSave(e: FormEvent) {
     e.preventDefault()
-    if (!hasAnyData(entries)) return
+    if (!hasAnyData(entries, notes)) return
 
     const clean: Record<string, CategoryEntry> = {}
     for (const cat of categories) {
       const entry = entries[cat.id]
       if (!entry) continue
-      const validEventIds = entry.eventIds.filter((id) =>
-        cat.eventTags.some((t) => t.id === id),
+      const validActivityIds = entry.activityIds.filter((id) =>
+        cat.activities.some((t) => t.id === id),
       )
-      if (
-        entry.value === null &&
-        validEventIds.length === 0 &&
-        !entry.notes.trim()
-      ) {
-        continue
-      }
-      clean[cat.id] = {
-        value: entry.value,
-        notes: entry.notes.trim(),
-        eventIds: validEventIds,
-      }
+      const value = cat.hasScale ? entry.value : null
+      if (value === null && validActivityIds.length === 0) continue
+      clean[cat.id] = { value, activityIds: validActivityIds }
     }
 
     onSave({
       ...checkIn,
       timestamp: new Date(timestamp).toISOString(),
+      notes: notes.trim(),
       entries: clean,
     })
   }
@@ -222,11 +213,20 @@ function EditModal({ checkIn, categories, onClose, onSave }: EditModalProps) {
               <CategorySlider
                 key={cat.id}
                 category={cat}
-                entry={entries[cat.id] ?? { value: null, notes: '', eventIds: [] }}
+                entry={entries[cat.id] ?? { value: null, activityIds: [] }}
                 onChange={(entry) => updateEntry(cat.id, entry)}
               />
             ))}
           </div>
+          <label className="notes-field checkin-notes">
+            <span>Notes</span>
+            <textarea
+              rows={3}
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="Anything else about this check-in…"
+            />
+          </label>
           <div className="form-actions">
             <button type="button" className="btn btn-ghost" onClick={onClose}>
               Cancel
@@ -234,7 +234,7 @@ function EditModal({ checkIn, categories, onClose, onSave }: EditModalProps) {
             <button
               type="submit"
               className="btn btn-primary"
-              disabled={!hasAnyData(entries)}
+              disabled={!hasAnyData(entries, notes)}
             >
               Save changes
             </button>

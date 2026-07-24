@@ -1,14 +1,30 @@
 import { useState, type FormEvent } from 'react'
 import { v4 as uuidv4 } from 'uuid'
-import type { AppSettings, CategoryConfig, EventTag } from '../types'
+import type { ActivityTag, AppSettings, CategoryConfig } from '../types'
 
 interface SettingsPanelProps {
   settings: AppSettings
   onChange: (settings: AppSettings) => void
 }
 
+const NEW_CATEGORY_COLORS = [
+  '#2a9d8f',
+  '#e76f51',
+  '#457b9d',
+  '#c9a227',
+  '#9b5de5',
+  '#ef476f',
+  '#00bbf9',
+  '#90be6d',
+]
+
 export function SettingsPanel({ settings, onChange }: SettingsPanelProps) {
-  const [newEventLabel, setNewEventLabel] = useState<Record<string, string>>({})
+  const [newActivityLabel, setNewActivityLabel] = useState<Record<string, string>>(
+    {},
+  )
+  const [newCategoryName, setNewCategoryName] = useState('')
+  const [newCategoryColor, setNewCategoryColor] = useState('#2a9d8f')
+  const [newCategoryHasScale, setNewCategoryHasScale] = useState(true)
 
   function updateCategories(categories: CategoryConfig[]) {
     onChange({ ...settings, categories })
@@ -34,37 +50,78 @@ export function SettingsPanel({ settings, onChange }: SettingsPanelProps) {
     )
   }
 
-  function addEvent(categoryId: string, e: FormEvent) {
-    e.preventDefault()
-    const label = (newEventLabel[categoryId] ?? '').trim()
-    if (!label) return
-    const tag: EventTag = { id: uuidv4(), label }
+  function setHasScale(id: string, hasScale: boolean) {
     updateCategories(
-      settings.categories.map((c) =>
-        c.id === categoryId ? { ...c, eventTags: [...c.eventTags, tag] } : c,
-      ),
+      settings.categories.map((c) => (c.id === id ? { ...c, hasScale } : c)),
     )
-    setNewEventLabel((prev) => ({ ...prev, [categoryId]: '' }))
   }
 
-  function removeEvent(categoryId: string, eventId: string) {
+  function removeCategory(id: string, label: string) {
+    if (settings.categories.length <= 1) {
+      window.alert('Keep at least one category.')
+      return
+    }
+    if (!window.confirm(`Remove category “${label}”? Past check-ins keep their data.`)) {
+      return
+    }
+    updateCategories(settings.categories.filter((c) => c.id !== id))
+  }
+
+  function addCategory(e: FormEvent) {
+    e.preventDefault()
+    const label = newCategoryName.trim()
+    if (!label) return
+    const category: CategoryConfig = {
+      id: uuidv4(),
+      label,
+      color: newCategoryColor,
+      description: '',
+      lowLabel: 'Low',
+      highLabel: 'High',
+      hasScale: newCategoryHasScale,
+      activities: [],
+    }
+    updateCategories([...settings.categories, category])
+    setNewCategoryName('')
+    setNewCategoryHasScale(true)
+    setNewCategoryColor(
+      NEW_CATEGORY_COLORS[
+        settings.categories.length % NEW_CATEGORY_COLORS.length
+      ],
+    )
+  }
+
+  function addActivity(categoryId: string, e: FormEvent) {
+    e.preventDefault()
+    const label = (newActivityLabel[categoryId] ?? '').trim()
+    if (!label) return
+    const tag: ActivityTag = { id: uuidv4(), label }
+    updateCategories(
+      settings.categories.map((c) =>
+        c.id === categoryId ? { ...c, activities: [...c.activities, tag] } : c,
+      ),
+    )
+    setNewActivityLabel((prev) => ({ ...prev, [categoryId]: '' }))
+  }
+
+  function removeActivity(categoryId: string, activityId: string) {
     updateCategories(
       settings.categories.map((c) =>
         c.id === categoryId
-          ? { ...c, eventTags: c.eventTags.filter((t) => t.id !== eventId) }
+          ? { ...c, activities: c.activities.filter((t) => t.id !== activityId) }
           : c,
       ),
     )
   }
 
-  function renameEvent(categoryId: string, eventId: string, label: string) {
+  function renameActivity(categoryId: string, activityId: string, label: string) {
     updateCategories(
       settings.categories.map((c) =>
         c.id === categoryId
           ? {
               ...c,
-              eventTags: c.eventTags.map((t) =>
-                t.id === eventId ? { ...t, label } : t,
+              activities: c.activities.map((t) =>
+                t.id === activityId ? { ...t, label } : t,
               ),
             }
           : c,
@@ -78,11 +135,43 @@ export function SettingsPanel({ settings, onChange }: SettingsPanelProps) {
         <div>
           <h2>Settings</h2>
           <p>
-            Reorder categories, pick colors, and add custom event buttons for each
-            category.
+            Add or remove categories, toggle 1–10 scales, pick colors, and manage
+            activity buttons.
           </p>
         </div>
       </header>
+
+      <form className="add-category-form" onSubmit={addCategory}>
+        <span className="filter-label">Add category</span>
+        <div className="add-category-row">
+          <label className="color-picker" title="Category color">
+            <input
+              type="color"
+              value={normalizeHex(newCategoryColor)}
+              onChange={(e) => setNewCategoryColor(e.target.value)}
+              aria-label="New category color"
+            />
+          </label>
+          <input
+            className="settings-label-input"
+            value={newCategoryName}
+            onChange={(e) => setNewCategoryName(e.target.value)}
+            placeholder="Category name"
+            aria-label="New category name"
+          />
+          <label className="scale-toggle">
+            <input
+              type="checkbox"
+              checked={newCategoryHasScale}
+              onChange={(e) => setNewCategoryHasScale(e.target.checked)}
+            />
+            <span>1–10 scale</span>
+          </label>
+          <button type="submit" className="btn btn-primary btn-sm">
+            Add
+          </button>
+        </div>
+      </form>
 
       <ul className="settings-list">
         {settings.categories.map((cat, index) => (
@@ -123,18 +212,34 @@ export function SettingsPanel({ settings, onChange }: SettingsPanelProps) {
                 >
                   ↓
                 </button>
+                <button
+                  type="button"
+                  className="btn btn-danger btn-sm"
+                  onClick={() => removeCategory(cat.id, cat.label)}
+                >
+                  Remove
+                </button>
               </div>
             </div>
 
+            <label className="scale-toggle scale-toggle--block">
+              <input
+                type="checkbox"
+                checked={cat.hasScale}
+                onChange={(e) => setHasScale(cat.id, e.target.checked)}
+              />
+              <span>Show 1–10 scale</span>
+            </label>
+
             <div className="settings-events">
-              <span className="filter-label">Event buttons</span>
-              {cat.eventTags.length === 0 ? (
+              <span className="filter-label">Activities</span>
+              {cat.activities.length === 0 ? (
                 <p className="settings-events__empty">
-                  No events yet — add ones like “sick” or “headache”.
+                  No activities yet — add ones like “sick” or “headache”.
                 </p>
               ) : (
                 <ul className="settings-event-list">
-                  {cat.eventTags.map((tag) => (
+                  {cat.activities.map((tag) => (
                     <li key={tag.id} className="settings-event-row">
                       <span
                         className="chip-dot"
@@ -144,14 +249,14 @@ export function SettingsPanel({ settings, onChange }: SettingsPanelProps) {
                       <input
                         value={tag.label}
                         onChange={(e) =>
-                          renameEvent(cat.id, tag.id, e.target.value)
+                          renameActivity(cat.id, tag.id, e.target.value)
                         }
-                        aria-label="Event name"
+                        aria-label="Activity name"
                       />
                       <button
                         type="button"
                         className="btn btn-danger btn-sm"
-                        onClick={() => removeEvent(cat.id, tag.id)}
+                        onClick={() => removeActivity(cat.id, tag.id)}
                       >
                         Remove
                       </button>
@@ -162,18 +267,18 @@ export function SettingsPanel({ settings, onChange }: SettingsPanelProps) {
 
               <form
                 className="add-event-form"
-                onSubmit={(e) => addEvent(cat.id, e)}
+                onSubmit={(e) => addActivity(cat.id, e)}
               >
                 <input
-                  value={newEventLabel[cat.id] ?? ''}
+                  value={newActivityLabel[cat.id] ?? ''}
                   onChange={(e) =>
-                    setNewEventLabel((prev) => ({
+                    setNewActivityLabel((prev) => ({
                       ...prev,
                       [cat.id]: e.target.value,
                     }))
                   }
-                  placeholder="New event name"
-                  aria-label={`Add event to ${cat.label}`}
+                  placeholder="New activity name"
+                  aria-label={`Add activity to ${cat.label}`}
                 />
                 <button type="submit" className="btn btn-ghost btn-sm">
                   Add

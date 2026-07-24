@@ -1,4 +1,4 @@
-export interface EventTag {
+export interface ActivityTag {
   id: string
   label: string
 }
@@ -10,18 +10,21 @@ export interface CategoryConfig {
   description: string
   lowLabel: string
   highLabel: string
-  eventTags: EventTag[]
+  /** When true, show a 1–10 scale on check-in and plot a rating line */
+  hasScale: boolean
+  activities: ActivityTag[]
 }
 
 export interface CategoryEntry {
   value: number | null
-  notes: string
-  eventIds: string[]
+  activityIds: string[]
 }
 
 export interface CheckIn {
   id: string
   timestamp: string
+  /** Whole check-in notes */
+  notes: string
   /** Keyed by category id */
   entries: Record<string, CategoryEntry>
 }
@@ -39,19 +42,19 @@ export interface AppSettings {
 }
 
 export function emptyEntry(): CategoryEntry {
-  return { value: null, notes: '', eventIds: [] }
+  return { value: null, activityIds: [] }
 }
 
 export function emptyEntries(categories: CategoryConfig[]): Record<string, CategoryEntry> {
   return Object.fromEntries(categories.map((c) => [c.id, emptyEntry()]))
 }
 
-export function hasAnyData(entries: Record<string, CategoryEntry>): boolean {
+export function hasAnyData(
+  entries: Record<string, CategoryEntry>,
+  notes = '',
+): boolean {
+  if (notes.trim().length > 0) return true
   return Object.values(entries).some(
-    (e) => e.value !== null || e.eventIds.length > 0 || e.notes.trim().length > 0,
+    (e) => e.value !== null || e.activityIds.length > 0,
   )
-}
-
-export function sortCategories(categories: CategoryConfig[]): CategoryConfig[] {
-  return [...categories]
 }

@@ -16,6 +16,7 @@ interface CheckInFormProps {
 
 export function CheckInForm({ categories, onSubmit }: CheckInFormProps) {
   const [entries, setEntries] = useState(() => emptyEntries(categories))
+  const [notes, setNotes] = useState('')
   const [savedFlash, setSavedFlash] = useState(false)
 
   useEffect(() => {
@@ -34,36 +35,33 @@ export function CheckInForm({ categories, onSubmit }: CheckInFormProps) {
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault()
-    if (!hasAnyData(entries)) return
+    if (!hasAnyData(entries, notes)) return
 
     const clean: Record<string, CategoryEntry> = {}
     for (const cat of categories) {
-      const entry = entries[cat.id] ?? emptyEntries(categories)[cat.id]
-      const validEventIds = entry.eventIds.filter((id) =>
-        cat.eventTags.some((t) => t.id === id),
+      const entry = entries[cat.id] ?? emptyEntryFallback()
+      const validActivityIds = entry.activityIds.filter((id) =>
+        cat.activities.some((t) => t.id === id),
       )
-      if (entry.value === null && validEventIds.length === 0 && !entry.notes.trim()) {
-        continue
-      }
-      clean[cat.id] = {
-        value: entry.value,
-        notes: entry.notes.trim(),
-        eventIds: validEventIds,
-      }
+      const value = cat.hasScale ? entry.value : null
+      if (value === null && validActivityIds.length === 0) continue
+      clean[cat.id] = { value, activityIds: validActivityIds }
     }
 
     onSubmit({
       id: uuidv4(),
       timestamp: new Date().toISOString(),
+      notes: notes.trim(),
       entries: clean,
     })
 
     setEntries(emptyEntries(categories))
+    setNotes('')
     setSavedFlash(true)
     window.setTimeout(() => setSavedFlash(false), 1800)
   }
 
-  const canSubmit = hasAnyData(entries)
+  const canSubmit = hasAnyData(entries, notes)
 
   return (
     <form className="checkin-form" onSubmit={handleSubmit}>
@@ -71,8 +69,8 @@ export function CheckInForm({ categories, onSubmit }: CheckInFormProps) {
         <div>
           <h2>New check-in</h2>
           <p>
-            Rate what matters, tap custom events, skip the rest. Add event buttons
-            in Settings.
+            Rate what you want, tap activities, add notes. Nothing is required —
+            save when you have something to log.
           </p>
         </div>
         {savedFlash && (
@@ -87,17 +85,30 @@ export function CheckInForm({ categories, onSubmit }: CheckInFormProps) {
           <CategorySlider
             key={cat.id}
             category={cat}
-            entry={entries[cat.id] ?? { value: null, notes: '', eventIds: [] }}
+            entry={entries[cat.id] ?? emptyEntryFallback()}
             onChange={(entry) => updateEntry(cat.id, entry)}
           />
         ))}
       </div>
 
+      <label className="notes-field checkin-notes">
+        <span>Notes</span>
+        <textarea
+          rows={3}
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          placeholder="Anything else about this check-in…"
+        />
+      </label>
+
       <div className="form-actions">
         <button
           type="button"
           className="btn btn-ghost"
-          onClick={() => setEntries(emptyEntries(categories))}
+          onClick={() => {
+            setEntries(emptyEntries(categories))
+            setNotes('')
+          }}
         >
           Reset
         </button>
@@ -107,4 +118,8 @@ export function CheckInForm({ categories, onSubmit }: CheckInFormProps) {
       </div>
     </form>
   )
+}
+
+function emptyEntryFallback(): CategoryEntry {
+  return { value: null, activityIds: [] }
 }
