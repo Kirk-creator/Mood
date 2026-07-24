@@ -1,4 +1,9 @@
-import { useState, type CSSProperties, type FormEvent } from 'react'
+import {
+  useRef,
+  useState,
+  type CSSProperties,
+  type KeyboardEvent,
+} from 'react'
 import type { CategoryConfig, CategoryEntry } from '../types'
 
 interface CategorySliderProps {
@@ -16,7 +21,9 @@ export function CategorySlider({
   onChange,
   onAddActivity,
 }: CategorySliderProps) {
+  const [adding, setAdding] = useState(false)
   const [newActivity, setNewActivity] = useState('')
+  const inputRef = useRef<HTMLInputElement | null>(null)
 
   function setValue(value: number | null) {
     onChange({ ...entry, value })
@@ -32,19 +39,36 @@ export function CategorySlider({
     })
   }
 
-  function handleAddActivity(e: FormEvent) {
-    e.preventDefault()
+  function commitActivity() {
     const label = newActivity.trim()
-    if (!label || !onAddActivity) return
+    if (!label || !onAddActivity) {
+      setAdding(false)
+      setNewActivity('')
+      return
+    }
     const id = onAddActivity(category.id, label)
-    if (!id) return
-    onChange({
-      ...entry,
-      activityIds: entry.activityIds.includes(id)
-        ? entry.activityIds
-        : [...entry.activityIds, id],
-    })
+    if (id) {
+      onChange({
+        ...entry,
+        activityIds: entry.activityIds.includes(id)
+          ? entry.activityIds
+          : [...entry.activityIds, id],
+      })
+    }
     setNewActivity('')
+    inputRef.current?.focus()
+  }
+
+  function handleKeyDown(e: KeyboardEvent<HTMLInputElement>) {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      e.stopPropagation()
+      commitActivity()
+    } else if (e.key === 'Escape') {
+      e.preventDefault()
+      setAdding(false)
+      setNewActivity('')
+    }
   }
 
   const hasScale = category.hasScale
@@ -70,22 +94,27 @@ export function CategorySlider({
       <div className="category-card__body">
         {hasScale && (
           <div className="scale-bubbles">
-            <div className="scale-bubbles__row" role="group" aria-label={`${category.label} rating`}>
+            <div
+              className="scale-bubbles__row"
+              role="group"
+              aria-label={`${category.label} rating`}
+            >
               {SCALE_VALUES.map((n) => {
-                const active = entry.value === n
+                const selected = entry.value === n
+                const filled = entry.value !== null && n <= entry.value
                 return (
                   <button
                     key={n}
                     type="button"
-                    className={`scale-bubble ${active ? 'is-active' : ''}`}
+                    className={`scale-bubble ${filled ? 'is-filled' : ''} ${
+                      selected ? 'is-selected' : ''
+                    }`}
                     style={
-                      {
-                        '--bubble-accent': category.color,
-                      } as CSSProperties
+                      { '--bubble-accent': category.color } as CSSProperties
                     }
-                    aria-pressed={active}
+                    aria-pressed={selected}
                     aria-label={`Rate ${n}`}
-                    onClick={() => setValue(active ? null : n)}
+                    onClick={() => setValue(selected ? null : n)}
                   >
                     {n}
                   </button>
@@ -121,24 +150,43 @@ export function CategorySlider({
                 </button>
               )
             })}
+
+            {onAddActivity &&
+              (adding ? (
+                <span className="event-tag event-tag--input">
+                  <input
+                    ref={inputRef}
+                    autoFocus
+                    value={newActivity}
+                    onChange={(e) => setNewActivity(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    onBlur={() => {
+                      if (!newActivity.trim()) setAdding(false)
+                    }}
+                    placeholder="Activity name"
+                    aria-label={`Add activity to ${category.label}`}
+                  />
+                  <button
+                    type="button"
+                    className="event-tag__confirm"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={commitActivity}
+                    aria-label="Save activity"
+                  >
+                    ✓
+                  </button>
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  className="event-tag event-tag--add"
+                  onClick={() => setAdding(true)}
+                  aria-label={`Add activity to ${category.label}`}
+                >
+                  <span aria-hidden>+</span>
+                </button>
+              ))}
           </div>
-          {onAddActivity && (
-            <form className="inline-add-activity" onSubmit={handleAddActivity}>
-              <input
-                value={newActivity}
-                onChange={(e) => setNewActivity(e.target.value)}
-                placeholder="Add activity…"
-                aria-label={`Add activity to ${category.label}`}
-              />
-              <button
-                type="submit"
-                className="btn btn-ghost btn-sm"
-                disabled={!newActivity.trim()}
-              >
-                Add
-              </button>
-            </form>
-          )}
         </div>
       </div>
     </section>

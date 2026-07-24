@@ -12,6 +12,7 @@ import {
   ZAxis,
 } from 'recharts'
 import { useEffect, useMemo, useState, type CSSProperties } from 'react'
+import { fillGaps } from '../chartUtils'
 import type {
   ActivityTag,
   CategoryConfig,
@@ -48,29 +49,23 @@ function resolveRange(filter: DateRangeFilter): { start: Date; end: Date } | nul
   return { start: startOfDay(subDays(now, days - 1)), end: endOfDay(now) }
 }
 
-/** Prefer Mood rating for activity Y; fall back so dots still render. */
-function activityYForCheckIn(
-  checkIn: CheckIn,
-  categories: CategoryConfig[],
-  activityCategoryId: string,
-): number {
-  const moodCat =
-    categories.find((c) => c.id === 'mood') ??
-    categories.find((c) => c.label.trim().toLowerCase() === 'mood')
-
-  const moodValue = moodCat ? checkIn.entries[moodCat.id]?.value : null
-  if (typeof moodValue === 'number') return moodValue
-
-  const ownValue = checkIn.entries[activityCategoryId]?.value
-  if (typeof ownValue === 'number') return ownValue
-
-  // Mid-scale marker so the activity is still visible on the chart
-  return 5.5
+interface DotProps {
+  cx?: number
+  cy?: number
+  payload?: Record<string, unknown>
 }
 
 export function Dashboard({ checkIns, categories }: DashboardProps) {
   const scaleCategories = useMemo(
     () => categories.filter((c) => c.hasScale),
+    [categories],
+  )
+
+  const moodCategory = useMemo(
+    () =>
+      categories.find((c) => c.id === 'mood') ??
+      categories.find((c) => c.label.trim().toLowerCase() === 'mood') ??
+      null,
     [categories],
   )
 
@@ -99,7 +94,10 @@ export function Dashboard({ checkIns, categories }: DashboardProps) {
     allActivities.find((a) => a.tag.id === selectedActivityId) ?? null
 
   useEffect(() => {
-    if (selectedActivityId && !allActivities.some((a) => a.tag.id === selectedActivityId)) {
+    if (
+      selectedActivityId &&
+      !allActivities.some((a) => a.tag.id === selectedActivityId)
+    ) {
       setSelectedActivityId(null)
     }
   }, [selectedActivityId, allActivities])
@@ -117,31 +115,41 @@ export function Dashboard({ checkIns, categories }: DashboardProps) {
   }, [checkIns, dateFilter])
 
   const chartData = useMemo(() => {
-    return filtered.map((c) => {
-      const row: Record<string, string | number | null> = {
+    const rows: Array<Record<string, string | number | boolean | null>> =
+      filtered.map((c) => ({
         id: c.id,
         label: format(parseISO(c.timestamp), 'MMM d · HH:mm'),
-      }
-      for (const cat of scaleCategories) {
-        row[cat.id] = c.entries[cat.id]?.value ?? null
-      }
+      }))
 
-      if (selectedActivity) {
+    for (const cat of scaleCategories) {
+      const raw = filtered.map((c) => c.entries[cat.id]?.value ?? null)
+      const filledSeries = fillGaps(raw)
+      raw.forEach((value, i) => {
+        rows[i][cat.id] = filledSeries[i]
+        rows[i][`${cat.id}__real`] = value !== null
+      })
+    }
+
+    if (selectedActivity && moodCategory) {
+      const moodRaw = filtered.map(
+        (c) => c.entries[moodCategory.id]?.value ?? null,
+      )
+      const moodFilled = fillGaps(moodRaw)
+      filtered.forEach((c, i) => {
         const entry = c.entries[selectedActivity.categoryId]
-        const hasActivity = entry?.activityIds.includes(selectedActivity.tag.id)
-        row[ACTIVITY_Y_KEY] = hasActivity
-          ? activityYForCheckIn(c, categories, selectedActivity.categoryId)
-          : null
-      } else {
-        row[ACTIVITY_Y_KEY] = null
-      }
+        const logged = entry?.activityIds.includes(selectedActivity.tag.id)
+        rows[i][ACTIVITY_Y_KEY] = logged ? moodFilled[i] : null
+      })
+    }
 
-      return row
-    })
-  }, [filtered, scaleCategories, selectedActivity, categories])
+    return rows
+  }, [filtered, scaleCategories, selectedActivity, moodCategory])
 
   const activityPointCount = useMemo(
-    () => chartData.filter((row) => row[ACTIVITY_Y_KEY] !== null).length,
+    () =>
+      chartData.filter(
+        (row) => row[ACTIVITY_Y_KEY] !== null && row[ACTIVITY_Y_KEY] !== undefined,
+      ).length,
     [chartData],
   )
 
@@ -239,7 +247,7 @@ export function Dashboard({ checkIns, categories }: DashboardProps) {
                   aria-pressed={selectedActivityId === act.tag.id}
                 >
                   <span
-                    className="chip-dot chip-dot--diamond"
+                    className="chip-dot"
                     style={{ background: act.color }}
                     aria-hidden
                   />
@@ -315,7 +323,9 @@ export function Dashboard({ checkIns, categories }: DashboardProps) {
                 : !hasVisibleContent
                   ? 'Select a category rating or one activity to plot.'
                   : selectedActivity && activityPointCount === 0 && activeCatCount === 0
-                    ? 'That activity has not been logged in this date range yet.'
+                    ? moodCategory
+                      ? 'That activity has no Mood ratings to sit on in this range.'
+                      : 'Add a Mood category to place activity dots.'
                     : 'No check-ins in this date range.'}
             </p>
           </div>
@@ -337,7 +347,7 @@ export function Dashboard({ checkIns, categories }: DashboardProps) {
                 tick={{ fill: '#5a6b64', fontSize: 11 }}
                 width={32}
               />
-              <ZAxis range={[90, 90]} />
+              <ZAxis range={[110, 110]} />
               <Tooltip
                 contentStyle={{
                   background: '#f7faf8',
@@ -356,9 +366,16 @@ export function Dashboard({ checkIns, categories }: DashboardProps) {
                     name={cat.label}
                     stroke={cat.color}
                     strokeWidth={2.5}
-                    dot={{ r: 3.5, strokeWidth: 0 }}
                     activeDot={{ r: 5 }}
                     connectNulls
+                    dot={(props: DotProps) => {
+                      const { cx, cy, payload } = props
+                      const isReal = payload?.[`${cat.id}__real`] === true
+                      if (!isReal || cx === undefined || cy === undefined) {
+                        return <g />
+                      }
+                      return <circle cx={cx} cy={cy} r={3.5} fill={cat.color} />
+                    }}
                   />
                 ) : null,
               )}
@@ -368,9 +385,9 @@ export function Dashboard({ checkIns, categories }: DashboardProps) {
                   dataKey={ACTIVITY_Y_KEY}
                   fill={selectedActivity.color}
                   stroke="#fff"
-                  strokeWidth={1}
-                  shape="diamond"
-                  legendType="diamond"
+                  strokeWidth={1.5}
+                  shape="circle"
+                  legendType="circle"
                 />
               ) : null}
             </ComposedChart>
