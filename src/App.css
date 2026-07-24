@@ -138,17 +138,17 @@
 
 .category-stack {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.75rem;
+  grid-template-columns: 1fr;
+  gap: 0.65rem;
 }
 
 .category-card {
   display: grid;
-  gap: 0.55rem;
+  gap: 0.45rem;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 14px;
-  padding: 0.85rem 0.8rem 0.95rem;
+  padding: 0.7rem 0.85rem 0.8rem;
   backdrop-filter: blur(12px);
   box-shadow: var(--shadow);
   transition: transform 0.25s ease, box-shadow 0.25s ease;
@@ -175,7 +175,7 @@
 
 .scale-bubbles {
   display: grid;
-  gap: 0.35rem;
+  gap: 0.25rem;
 }
 
 .scale-bubbles__hint {
@@ -189,18 +189,20 @@
 }
 
 .scale-bubbles__row {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 0.35rem 0.3rem;
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.2rem;
   width: 100%;
-  justify-items: center;
 }
 
 .scale-bubble {
-  width: 100%;
+  flex: 1 1 0;
   aspect-ratio: 1;
   min-width: 0;
   max-width: 2.35rem;
+  height: auto;
   display: grid;
   place-items: center;
   border-radius: 999px;
@@ -209,7 +211,7 @@
   color: var(--ink-muted);
   font-weight: 700;
   font-family: var(--font-display);
-  font-size: 0.8rem;
+  font-size: clamp(0.65rem, 1.8vw, 0.82rem);
   transition:
     background 0.15s ease,
     color 0.15s ease,
@@ -294,13 +296,13 @@
 }
 
 .event-tags__label {
+  flex: 0 0 100%;
   font-size: 0.68rem;
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--ink-muted);
-  align-self: center;
-  margin-right: 0.1rem;
+  margin: 0.1rem 0 0;
 }
 
 .event-tag-row {
@@ -908,17 +910,19 @@
   }
 
   .category-stack {
-    grid-template-columns: 1fr;
-    gap: 0.7rem;
+    gap: 0.6rem;
   }
 
   .category-card {
-    padding: 0.9rem 0.85rem 1rem;
+    padding: 0.75rem 0.8rem 0.85rem;
+  }
+
+  .scale-bubbles__row {
+    gap: 0.2rem;
   }
 
   .scale-bubble {
-    max-width: 2.6rem;
-    font-size: 0.88rem;
+    max-width: 2.2rem;
   }
 
   .panel-header {
@@ -992,9 +996,3 @@
   }
 }
 
-@media (min-width: 781px) and (max-width: 980px) {
-  .scale-bubble {
-    max-width: 2.05rem;
-    font-size: 0.74rem;
-  }
-}
