@@ -11,14 +11,11 @@ Client-side mood, activity, and health correlation tracker. Log flexible multi-t
 - **Full CRUD** — edit or delete past check-ins
 - **LocalStorage persistence** — no backend required
 
-## Categories
+## Live site
 
-| Category | Scale |
-|---|---|
-| Mood | 1–10 |
-| Physical Exercise | 1–10 |
-| Physical Well-being | 1–10 |
-| Energy Level | 1–10 |
+**https://kirk-creator.github.io/Mood/** (redirects to the built app)
+
+Direct build URL: **https://kirk-creator.github.io/Mood/docs/**
 
 ## Develop
 
@@ -34,16 +31,12 @@ npm run build
 npm run preview
 ```
 
-The Vite `base` path defaults to `/Mood/` for GitHub Pages (`https://<user>.github.io/Mood/`). For local root hosting or a custom domain:
+Production files are written to `docs/` (committed for GitHub Pages). Asset paths use a relative Vite `base`.
 
-```bash
-VITE_BASE_PATH=/ npm run build
-```
+## GitHub Pages setup
 
-## Deploy (GitHub Pages)
+This repo’s Pages source is **Deploy from a branch → `main` → `/ (root)`**. The root `index.html` redirects GitHub Pages visitors to `/docs/` (the production build).
 
-1. In the repo **Settings → Pages**, set **Source** to **GitHub Actions**.
-2. Push to `main` (or run the **Deploy to GitHub Pages** workflow manually).
-3. The workflow in `.github/workflows/deploy.yml` builds the SPA and publishes the `dist` folder.
+For a cleaner URL without `/docs`, switch **Settings → Pages → Source** to **GitHub Actions**, or set the branch folder to **`/docs`**.
 
-No server or API keys are required — the app is a static SPA.
+Pushes to `main` rebuild `docs/` via `.github/workflows/deploy.yml`.

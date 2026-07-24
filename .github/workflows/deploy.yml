@@ -3,19 +3,20 @@ name: Deploy to GitHub Pages
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - 'docs/**'
+      - 'README.md'
   workflow_dispatch:
 
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write
 
 concurrency:
-  group: pages
+  group: pages-docs
   cancel-in-progress: true
 
 jobs:
-  build:
+  build-and-publish-docs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -33,24 +34,16 @@ jobs:
       - name: Build
         run: npm run build
         env:
-          # Matches https://<user>.github.io/<repo>/
-          VITE_BASE_PATH: /Mood/
+          VITE_BASE_PATH: ./
 
-      - name: Setup Pages
-        uses: actions/configure-pages@v5
-
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: dist
-
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+      - name: Commit built site to docs/
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs
+          if git diff --staged --quiet; then
+            echo "No docs changes to commit"
+          else
+            git commit -m "chore: update GitHub Pages build in docs/"
+            git push
+          fi

@@ -1,11 +1,15 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
-// GitHub Pages serves from /<repo-name>/ — set base accordingly.
-// Override with VITE_BASE_PATH for custom domains or local root hosting.
-const base = process.env.VITE_BASE_PATH ?? '/Mood/'
+// Relative base keeps asset paths correct for GitHub Pages project sites
+// whether served from /Mood/ (Actions) or /Mood/docs/ (branch deploy).
+const base = process.env.VITE_BASE_PATH ?? './'
 
 export default defineConfig({
   plugins: [react()],
   base,
+  build: {
+    outDir: 'docs',
+    emptyOutDir: true,
+  },
 })
