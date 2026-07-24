@@ -5,11 +5,11 @@ import {
   defaultSettings,
 } from './constants'
 import type {
+  ActivityTag,
   AppSettings,
   CategoryConfig,
   CategoryEntry,
   CheckIn,
-  EventTag,
 } from './types'
 import { emptyEntry } from './types'
 
@@ -17,47 +17,55 @@ function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
 }
 
-function normalizeEntry(raw: unknown): CategoryEntry {
-  if (!isObject(raw)) return emptyEntry()
+function normalizeEntry(raw: unknown): { entry: CategoryEntry; legacyNotes: string } {
+  if (!isObject(raw)) return { entry: emptyEntry(), legacyNotes: '' }
   const value =
     typeof raw.value === 'number' && raw.value >= 1 && raw.value <= 10
       ? Math.round(raw.value)
       : null
-  const notes = typeof raw.notes === 'string' ? raw.notes : ''
-  const eventIds = Array.isArray(raw.eventIds)
-    ? raw.eventIds.filter((id): id is string => typeof id === 'string')
-    : []
-  return { value, notes, eventIds }
-}
+  const legacyNotes = typeof raw.notes === 'string' ? raw.notes.trim() : ''
 
-function migrateLegacyCheckIn(raw: Record<string, unknown>): CheckIn | null {
-  if (typeof raw.id !== 'string' || typeof raw.timestamp !== 'string') return null
-  const ratings = isObject(raw.ratings) ? raw.ratings : {}
-  const entries: Record<string, CategoryEntry> = {}
-  for (const [key, value] of Object.entries(ratings)) {
-    entries[key] = normalizeEntry(value)
+  let activityIds: string[] = []
+  if (Array.isArray(raw.activityIds)) {
+    activityIds = raw.activityIds.filter((id): id is string => typeof id === 'string')
+  } else if (Array.isArray(raw.eventIds)) {
+    activityIds = raw.eventIds.filter((id): id is string => typeof id === 'string')
   }
-  return { id: raw.id, timestamp: raw.timestamp, entries }
+
+  return { entry: { value, activityIds }, legacyNotes }
 }
 
 function normalizeCheckIn(raw: unknown): CheckIn | null {
   if (!isObject(raw)) return null
   if (typeof raw.id !== 'string' || typeof raw.timestamp !== 'string') return null
 
-  if (isObject(raw.entries)) {
-    const entries: Record<string, CategoryEntry> = {}
-    for (const [key, value] of Object.entries(raw.entries)) {
-      entries[key] = normalizeEntry(value)
+  const entries: Record<string, CategoryEntry> = {}
+  const noteParts: string[] = []
+
+  if (typeof raw.notes === 'string' && raw.notes.trim()) {
+    noteParts.push(raw.notes.trim())
+  }
+
+  const source = isObject(raw.entries)
+    ? raw.entries
+    : isObject(raw.ratings)
+      ? raw.ratings
+      : null
+
+  if (source) {
+    for (const [key, value] of Object.entries(source)) {
+      const { entry, legacyNotes } = normalizeEntry(value)
+      entries[key] = entry
+      if (legacyNotes) noteParts.push(legacyNotes)
     }
-    return { id: raw.id, timestamp: raw.timestamp, entries }
   }
 
-  // Legacy v1 shape: { ratings: { mood: { value, notes }, ... } }
-  if (isObject(raw.ratings)) {
-    return migrateLegacyCheckIn(raw)
+  return {
+    id: raw.id,
+    timestamp: raw.timestamp,
+    notes: noteParts.join('\n'),
+    entries,
   }
-
-  return null
 }
 
 export function loadCheckIns(): CheckIn[] {
@@ -75,7 +83,6 @@ export function loadCheckIns(): CheckIn[] {
         )
     }
 
-    // One-time migrate from v1
     const legacy = localStorage.getItem(LEGACY_CHECKINS_KEY)
     if (!legacy) return []
     const parsed: unknown = JSON.parse(legacy)
@@ -114,7 +121,7 @@ export function deleteCheckIn(id: string): CheckIn[] {
   return next
 }
 
-function normalizeEventTag(raw: unknown): EventTag | null {
+function normalizeActivityTag(raw: unknown): ActivityTag | null {
   if (!isObject(raw)) return null
   if (typeof raw.id !== 'string' || typeof raw.label !== 'string') return null
   const label = raw.label.trim()
@@ -126,9 +133,17 @@ function normalizeCategory(raw: unknown): CategoryConfig | null {
   if (!isObject(raw)) return null
   if (typeof raw.id !== 'string' || typeof raw.label !== 'string') return null
   if (typeof raw.color !== 'string') return null
-  const eventTags = Array.isArray(raw.eventTags)
-    ? raw.eventTags.map(normalizeEventTag).filter((t): t is EventTag => t !== null)
-    : []
+
+  const activitiesRaw = Array.isArray(raw.activities)
+    ? raw.activities
+    : Array.isArray(raw.eventTags)
+      ? raw.eventTags
+      : []
+
+  const activities = activitiesRaw
+    .map(normalizeActivityTag)
+    .filter((t): t is ActivityTag => t !== null)
+
   return {
     id: raw.id,
     label: raw.label,
@@ -136,7 +151,8 @@ function normalizeCategory(raw: unknown): CategoryConfig | null {
     description: typeof raw.description === 'string' ? raw.description : '',
     lowLabel: typeof raw.lowLabel === 'string' ? raw.lowLabel : 'Low',
     highLabel: typeof raw.highLabel === 'string' ? raw.highLabel : 'High',
-    eventTags,
+    hasScale: typeof raw.hasScale === 'boolean' ? raw.hasScale : true,
+    activities,
   }
 }
 
