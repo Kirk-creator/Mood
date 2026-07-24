@@ -153,6 +153,7 @@ export function SettingsPanel({ settings, onChange }: SettingsPanelProps) {
             />
           </label>
           <input
+            className="settings-label-input"
             value={newCategoryName}
             onChange={(e) => setNewCategoryName(e.target.value)}
             placeholder="Category name"
