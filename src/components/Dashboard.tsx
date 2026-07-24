@@ -11,7 +11,7 @@ import {
   YAxis,
   ZAxis,
 } from 'recharts'
-import { useMemo, useState, type CSSProperties } from 'react'
+import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import type {
   ActivityTag,
   CategoryConfig,
@@ -32,6 +32,8 @@ interface FlatActivity {
   tag: ActivityTag
 }
 
+const ACTIVITY_Y_KEY = '__activityY'
+
 function resolveRange(filter: DateRangeFilter): { start: Date; end: Date } | null {
   const now = new Date()
   if (filter.preset === 'all') return null
@@ -46,15 +48,33 @@ function resolveRange(filter: DateRangeFilter): { start: Date; end: Date } | nul
   return { start: startOfDay(subDays(now, days - 1)), end: endOfDay(now) }
 }
 
+/** Prefer Mood rating for activity Y; fall back so dots still render. */
+function activityYForCheckIn(
+  checkIn: CheckIn,
+  categories: CategoryConfig[],
+  activityCategoryId: string,
+): number {
+  const moodCat =
+    categories.find((c) => c.id === 'mood') ??
+    categories.find((c) => c.label.trim().toLowerCase() === 'mood')
+
+  const moodValue = moodCat ? checkIn.entries[moodCat.id]?.value : null
+  if (typeof moodValue === 'number') return moodValue
+
+  const ownValue = checkIn.entries[activityCategoryId]?.value
+  if (typeof ownValue === 'number') return ownValue
+
+  // Mid-scale marker so the activity is still visible on the chart
+  return 5.5
+}
+
 export function Dashboard({ checkIns, categories }: DashboardProps) {
   const scaleCategories = useMemo(
     () => categories.filter((c) => c.hasScale),
     [categories],
   )
 
-  const [visibleCats, setVisibleCats] = useState<Record<string, boolean>>(() =>
-    Object.fromEntries(scaleCategories.map((c) => [c.id, true])),
-  )
+  const [visibleCats, setVisibleCats] = useState<Record<string, boolean>>({})
   const [selectedActivityId, setSelectedActivityId] = useState<string | null>(null)
   const [dateFilter, setDateFilter] = useState<DateRangeFilter>({
     preset: '30d',
@@ -78,6 +98,12 @@ export function Dashboard({ checkIns, categories }: DashboardProps) {
   const selectedActivity =
     allActivities.find((a) => a.tag.id === selectedActivityId) ?? null
 
+  useEffect(() => {
+    if (selectedActivityId && !allActivities.some((a) => a.tag.id === selectedActivityId)) {
+      setSelectedActivityId(null)
+    }
+  }, [selectedActivityId, allActivities])
+
   const filtered = useMemo(() => {
     const range = resolveRange(dateFilter)
     const chronological = [...checkIns].sort(
@@ -99,27 +125,25 @@ export function Dashboard({ checkIns, categories }: DashboardProps) {
       for (const cat of scaleCategories) {
         row[cat.id] = c.entries[cat.id]?.value ?? null
       }
+
+      if (selectedActivity) {
+        const entry = c.entries[selectedActivity.categoryId]
+        const hasActivity = entry?.activityIds.includes(selectedActivity.tag.id)
+        row[ACTIVITY_Y_KEY] = hasActivity
+          ? activityYForCheckIn(c, categories, selectedActivity.categoryId)
+          : null
+      } else {
+        row[ACTIVITY_Y_KEY] = null
+      }
+
       return row
     })
-  }, [filtered, scaleCategories])
+  }, [filtered, scaleCategories, selectedActivity, categories])
 
-  /** Single activity series: Y = Mood rating when present */
-  const activityPoints = useMemo(() => {
-    if (!selectedActivity) return []
-    const points: Array<{ label: string; y: number; name: string }> = []
-    for (const checkIn of filtered) {
-      const moodValue = checkIn.entries.mood?.value
-      if (moodValue === null || moodValue === undefined) continue
-      const entry = checkIn.entries[selectedActivity.categoryId]
-      if (!entry?.activityIds.includes(selectedActivity.tag.id)) continue
-      points.push({
-        label: format(parseISO(checkIn.timestamp), 'MMM d · HH:mm'),
-        y: moodValue,
-        name: `${selectedActivity.categoryLabel}: ${selectedActivity.tag.label}`,
-      })
-    }
-    return points
-  }, [filtered, selectedActivity])
+  const activityPointCount = useMemo(
+    () => chartData.filter((row) => row[ACTIVITY_Y_KEY] !== null).length,
+    [chartData],
+  )
 
   function setPreset(preset: DateRangePreset) {
     setDateFilter((prev) => ({ ...prev, preset }))
@@ -132,8 +156,7 @@ export function Dashboard({ checkIns, categories }: DashboardProps) {
   const activeCatCount = scaleCategories.filter((c) => isCatVisible(c.id)).length
   const hasVisibleContent = activeCatCount > 0 || selectedActivity !== null
   const hasPoints =
-    chartData.length > 0 &&
-    (activeCatCount > 0 || activityPoints.length > 0)
+    chartData.length > 0 && (activeCatCount > 0 || activityPointCount > 0)
 
   return (
     <section className="dashboard">
@@ -190,7 +213,7 @@ export function Dashboard({ checkIns, categories }: DashboardProps) {
           <span className="filter-label">Activity on Mood line</span>
           {allActivities.length === 0 ? (
             <p className="filter-hint">
-              Add activities in Settings (e.g. Health → Sick) to plot them here.
+              Add activities on a check-in card or in Settings to plot them here.
             </p>
           ) : (
             <div className="chip-row">
@@ -291,8 +314,8 @@ export function Dashboard({ checkIns, categories }: DashboardProps) {
                 ? 'No check-ins yet. Log your first entry to see trends.'
                 : !hasVisibleContent
                   ? 'Select a category rating or one activity to plot.'
-                  : selectedActivity && activityPoints.length === 0 && activeCatCount === 0
-                    ? 'No Mood ratings for that activity in this range.'
+                  : selectedActivity && activityPointCount === 0 && activeCatCount === 0
+                    ? 'That activity has not been logged in this date range yet.'
                     : 'No check-ins in this date range.'}
             </p>
           </div>
@@ -314,7 +337,7 @@ export function Dashboard({ checkIns, categories }: DashboardProps) {
                 tick={{ fill: '#5a6b64', fontSize: 11 }}
                 width={32}
               />
-              <ZAxis range={[80, 80]} />
+              <ZAxis range={[90, 90]} />
               <Tooltip
                 contentStyle={{
                   background: '#f7faf8',
@@ -339,11 +362,10 @@ export function Dashboard({ checkIns, categories }: DashboardProps) {
                   />
                 ) : null,
               )}
-              {selectedActivity && activityPoints.length > 0 ? (
+              {selectedActivity ? (
                 <Scatter
                   name={`${selectedActivity.categoryLabel}: ${selectedActivity.tag.label}`}
-                  data={activityPoints}
-                  dataKey="y"
+                  dataKey={ACTIVITY_Y_KEY}
                   fill={selectedActivity.color}
                   stroke="#fff"
                   strokeWidth={1}
@@ -362,7 +384,7 @@ export function Dashboard({ checkIns, categories }: DashboardProps) {
           ? ` · ${activeCatCount} categor${activeCatCount === 1 ? 'y' : 'ies'}`
           : ''}
         {selectedActivity
-          ? ` · ${selectedActivity.tag.label} on Mood (${activityPoints.length} point${activityPoints.length === 1 ? '' : 's'})`
+          ? ` · ${selectedActivity.tag.label} (${activityPointCount} point${activityPointCount === 1 ? '' : 's'})`
           : ''}
       </p>
     </section>

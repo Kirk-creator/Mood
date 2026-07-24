@@ -5,9 +5,10 @@ Client-side mood, activity, and health correlation tracker. Log flexible multi-t
 ## Features
 
 - **Multiple daily check-ins** — log as often as you like
-- **Configurable categories** — add, remove, reorder, and recolor; each can optionally use a 1–10 scale
-- **Custom activities** per category (e.g. Health → Sick) — add, rename, or remove in Settings
+- **Configurable categories** — add, remove, reorder, and recolor; each can optionally use a 1–10 bubble scale
+- **Custom activities** per category — add them on the check-in card or in Settings
 - **Trends chart** — category rating lines plus one activity at a time as dots on the Mood line
+- **Confetti** — celebrates every saved check-in
 - **Whole-check-in notes** — one notes field per entry
 - **Full CRUD** — edit or delete past check-ins
 - **LocalStorage persistence** — nothing is uploaded; older data migrates automatically

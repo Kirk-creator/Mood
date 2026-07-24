@@ -14,6 +14,7 @@ interface HistoryListProps {
   categories: CategoryConfig[]
   onUpdate: (checkIn: CheckIn) => void
   onDelete: (id: string) => void
+  onAddActivity: (categoryId: string, label: string) => string | null
 }
 
 export function HistoryList({
@@ -21,6 +22,7 @@ export function HistoryList({
   categories,
   onUpdate,
   onDelete,
+  onAddActivity,
 }: HistoryListProps) {
   const [editing, setEditing] = useState<CheckIn | null>(null)
   const categoryMap = Object.fromEntries(categories.map((c) => [c.id, c]))
@@ -119,6 +121,7 @@ export function HistoryList({
         <EditModal
           checkIn={editing}
           categories={categories}
+          onAddActivity={onAddActivity}
           onClose={() => setEditing(null)}
           onSave={(next) => {
             onUpdate(next)
@@ -133,11 +136,18 @@ export function HistoryList({
 interface EditModalProps {
   checkIn: CheckIn
   categories: CategoryConfig[]
+  onAddActivity: (categoryId: string, label: string) => string | null
   onClose: () => void
   onSave: (checkIn: CheckIn) => void
 }
 
-function EditModal({ checkIn, categories, onClose, onSave }: EditModalProps) {
+function EditModal({
+  checkIn,
+  categories,
+  onAddActivity,
+  onClose,
+  onSave,
+}: EditModalProps) {
   const [timestamp, setTimestamp] = useState(
     format(parseISO(checkIn.timestamp), "yyyy-MM-dd'T'HH:mm"),
   )
@@ -215,6 +225,7 @@ function EditModal({ checkIn, categories, onClose, onSave }: EditModalProps) {
                 category={cat}
                 entry={entries[cat.id] ?? { value: null, activityIds: [] }}
                 onChange={(entry) => updateEntry(cat.id, entry)}
+                onAddActivity={onAddActivity}
               />
             ))}
           </div>
