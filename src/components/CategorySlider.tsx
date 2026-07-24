@@ -76,31 +76,35 @@ export function CategorySlider({
 
       {category.hasScale && (
         <div
-          className="scale-bubbles__row"
+          className="scale-bubbles"
           role="group"
           aria-label={`${category.label} rating`}
         >
-          <span className="scale-edge">{category.lowLabel}</span>
-          {SCALE_VALUES.map((n) => {
-            const selected = entry.value === n
-            const filled = entry.value !== null && n <= entry.value
-            return (
-              <button
-                key={n}
-                type="button"
-                className={`scale-bubble ${filled ? 'is-filled' : ''} ${
-                  selected ? 'is-selected' : ''
-                }`}
-                style={{ '--bubble-accent': category.color } as CSSProperties}
-                aria-pressed={selected}
-                aria-label={`Rate ${n}`}
-                onClick={() => setValue(selected ? null : n)}
-              >
-                {n}
-              </button>
-            )
-          })}
-          <span className="scale-edge">{category.highLabel}</span>
+          <div className="scale-bubbles__hint" aria-hidden>
+            <span>{category.lowLabel}</span>
+            <span>{category.highLabel}</span>
+          </div>
+          <div className="scale-bubbles__row">
+            {SCALE_VALUES.map((n) => {
+              const selected = entry.value === n
+              const filled = entry.value !== null && n <= entry.value
+              return (
+                <button
+                  key={n}
+                  type="button"
+                  className={`scale-bubble ${filled ? 'is-filled' : ''} ${
+                    selected ? 'is-selected' : ''
+                  }`}
+                  style={{ '--bubble-accent': category.color } as CSSProperties}
+                  aria-pressed={selected}
+                  aria-label={`Rate ${n} (${category.lowLabel} to ${category.highLabel})`}
+                  onClick={() => setValue(selected ? null : n)}
+                >
+                  {n}
+                </button>
+              )
+            })}
+          </div>
         </div>
       )}
 

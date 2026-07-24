@@ -10,6 +10,13 @@ import './App.css'
 
 type View = 'checkin' | 'trends' | 'history' | 'settings'
 
+const NAV_ITEMS = [
+  { id: 'checkin' as const, label: 'Check-in' },
+  { id: 'trends' as const, label: 'Trends' },
+  { id: 'history' as const, label: 'History' },
+  { id: 'settings' as const, label: 'Settings' },
+]
+
 export default function App() {
   const { checkIns, ready, add, update, remove } = useCheckIns()
   const { settings, updateSettings } = useSettings()
@@ -54,6 +61,24 @@ export default function App() {
     [settings.categories, updateSettings],
   )
 
+  function renderNav(className: string, ariaLabel: string) {
+    return (
+      <nav className={className} aria-label={ariaLabel}>
+        {NAV_ITEMS.map(({ id, label }) => (
+          <button
+            key={id}
+            type="button"
+            className={`nav-link ${view === id ? 'is-active' : ''}`}
+            onClick={() => setView(id)}
+            aria-current={view === id ? 'page' : undefined}
+          >
+            {label}
+          </button>
+        ))}
+      </nav>
+    )
+  }
+
   return (
     <div className="app">
       <div className="ambient" aria-hidden />
@@ -65,26 +90,7 @@ export default function App() {
             <p className="brand-tag">Mood · activity · health</p>
           </div>
         </div>
-        <nav className="nav" aria-label="Primary">
-          {(
-            [
-              ['checkin', 'Check-in'],
-              ['trends', 'Trends'],
-              ['history', 'History'],
-              ['settings', 'Settings'],
-            ] as const
-          ).map(([id, label]) => (
-            <button
-              key={id}
-              type="button"
-              className={`nav-link ${view === id ? 'is-active' : ''}`}
-              onClick={() => setView(id)}
-              aria-current={view === id ? 'page' : undefined}
-            >
-              {label}
-            </button>
-          ))}
-        </nav>
+        {renderNav('nav desktop-nav', 'Primary')}
         <p className="header-meta">
           {ready ? `${checkIns.length} saved` : 'Loading…'}
         </p>
@@ -118,6 +124,8 @@ export default function App() {
       <footer className="site-footer">
         <p>Data stays in your browser via localStorage — nothing is uploaded.</p>
       </footer>
+
+      {renderNav('nav mobile-nav', 'Mobile')}
     </div>
   )
 }
