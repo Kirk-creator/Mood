@@ -9,6 +9,19 @@
       content="Pulse — track mood, exercise, well-being, and energy to spot health correlations."
     />
     <title>Pulse · Mood & Health Tracker</title>
+    <script>
+      // GitHub Pages currently serves the repo root (Vite source). Redirect to
+      // the production build in /docs so the app is not a blank page.
+      (function () {
+        var host = location.hostname
+        if (host.endsWith('github.io') || host.endsWith('github.com')) {
+          var base = location.pathname.replace(/\/index\.html$/, '/')
+          if (!/\/docs\/?$/.test(base)) {
+            location.replace(base.replace(/\/?$/, '/') + 'docs/')
+          }
+        }
+      })()
+    </script>
   </head>
   <body>
     <div id="root"></div>
