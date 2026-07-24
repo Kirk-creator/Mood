@@ -46,15 +46,7 @@ export function CategorySlider({
       setNewActivity('')
       return
     }
-    const id = onAddActivity(category.id, label)
-    if (id) {
-      onChange({
-        ...entry,
-        activityIds: entry.activityIds.includes(id)
-          ? entry.activityIds
-          : [...entry.activityIds, id],
-      })
-    }
+    onAddActivity(category.id, label)
     setNewActivity('')
     inputRef.current?.focus()
   }
@@ -71,123 +63,104 @@ export function CategorySlider({
     }
   }
 
-  const hasScale = category.hasScale
-
   return (
     <section className="category-card" data-category={category.id}>
-      <header className="category-card__header">
-        <div>
-          <h3 className="category-card__title">
-            <span
-              className="category-card__swatch"
-              style={{ background: category.color }}
-              aria-hidden
-            />
-            {category.label}
-          </h3>
-          {category.description ? (
-            <p className="category-card__desc">{category.description}</p>
-          ) : null}
-        </div>
-      </header>
+      <h3 className="category-card__title">
+        <span
+          className="category-card__swatch"
+          style={{ background: category.color }}
+          aria-hidden
+        />
+        {category.label}
+      </h3>
 
-      <div className="category-card__body">
-        {hasScale && (
-          <div className="scale-bubbles">
-            <div
-              className="scale-bubbles__row"
-              role="group"
-              aria-label={`${category.label} rating`}
+      {category.hasScale && (
+        <div
+          className="scale-bubbles__row"
+          role="group"
+          aria-label={`${category.label} rating`}
+        >
+          <span className="scale-edge">{category.lowLabel}</span>
+          {SCALE_VALUES.map((n) => {
+            const selected = entry.value === n
+            const filled = entry.value !== null && n <= entry.value
+            return (
+              <button
+                key={n}
+                type="button"
+                className={`scale-bubble ${filled ? 'is-filled' : ''} ${
+                  selected ? 'is-selected' : ''
+                }`}
+                style={{ '--bubble-accent': category.color } as CSSProperties}
+                aria-pressed={selected}
+                aria-label={`Rate ${n}`}
+                onClick={() => setValue(selected ? null : n)}
+              >
+                {n}
+              </button>
+            )
+          })}
+          <span className="scale-edge">{category.highLabel}</span>
+        </div>
+      )}
+
+      <div className="event-tag-row">
+        <span className="event-tags__label">Activities</span>
+        {category.activities.map((tag) => {
+          const active = entry.activityIds.includes(tag.id)
+          return (
+            <button
+              key={tag.id}
+              type="button"
+              className={`event-tag ${active ? 'is-active' : ''}`}
+              style={
+                active
+                  ? ({ '--tag-accent': category.color } as CSSProperties)
+                  : undefined
+              }
+              aria-pressed={active}
+              onClick={() => toggleActivity(tag.id)}
             >
-              {SCALE_VALUES.map((n) => {
-                const selected = entry.value === n
-                const filled = entry.value !== null && n <= entry.value
-                return (
-                  <button
-                    key={n}
-                    type="button"
-                    className={`scale-bubble ${filled ? 'is-filled' : ''} ${
-                      selected ? 'is-selected' : ''
-                    }`}
-                    style={
-                      { '--bubble-accent': category.color } as CSSProperties
-                    }
-                    aria-pressed={selected}
-                    aria-label={`Rate ${n}`}
-                    onClick={() => setValue(selected ? null : n)}
-                  >
-                    {n}
-                  </button>
-                )
-              })}
-            </div>
-            <div className="slider-labels">
-              <span>{category.lowLabel}</span>
-              <span>{category.highLabel}</span>
-            </div>
-          </div>
-        )}
+              {tag.label}
+            </button>
+          )
+        })}
 
-        <div className="event-tags">
-          <span className="event-tags__label">Activities</span>
-          <div className="event-tag-row">
-            {category.activities.map((tag) => {
-              const active = entry.activityIds.includes(tag.id)
-              return (
-                <button
-                  key={tag.id}
-                  type="button"
-                  className={`event-tag ${active ? 'is-active' : ''}`}
-                  style={
-                    active
-                      ? ({ '--tag-accent': category.color } as CSSProperties)
-                      : undefined
-                  }
-                  aria-pressed={active}
-                  onClick={() => toggleActivity(tag.id)}
-                >
-                  {tag.label}
-                </button>
-              )
-            })}
-
-            {onAddActivity &&
-              (adding ? (
-                <span className="event-tag event-tag--input">
-                  <input
-                    ref={inputRef}
-                    autoFocus
-                    value={newActivity}
-                    onChange={(e) => setNewActivity(e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    onBlur={() => {
-                      if (!newActivity.trim()) setAdding(false)
-                    }}
-                    placeholder="Activity name"
-                    aria-label={`Add activity to ${category.label}`}
-                  />
-                  <button
-                    type="button"
-                    className="event-tag__confirm"
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={commitActivity}
-                    aria-label="Save activity"
-                  >
-                    ✓
-                  </button>
-                </span>
-              ) : (
-                <button
-                  type="button"
-                  className="event-tag event-tag--add"
-                  onClick={() => setAdding(true)}
-                  aria-label={`Add activity to ${category.label}`}
-                >
-                  <span aria-hidden>+</span>
-                </button>
-              ))}
-          </div>
-        </div>
+        {onAddActivity &&
+          (adding ? (
+            <span className="event-tag event-tag--input">
+              <input
+                ref={inputRef}
+                autoFocus
+                value={newActivity}
+                onChange={(e) => setNewActivity(e.target.value)}
+                onKeyDown={handleKeyDown}
+                onBlur={() => {
+                  if (!newActivity.trim()) setAdding(false)
+                }}
+                placeholder="Activity name"
+                aria-label={`Add activity to ${category.label}`}
+              />
+              <button
+                type="button"
+                className="event-tag__confirm"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={commitActivity}
+                aria-label="Save activity"
+              >
+                ✓
+              </button>
+            </span>
+          ) : (
+            <button
+              type="button"
+              className="event-tag event-tag--add"
+              onClick={() => setAdding(true)}
+              aria-label={`Add activity to ${category.label}`}
+            >
+              <span aria-hidden>+</span>
+            </button>
+          ))}
       </div>
     </section>
   )

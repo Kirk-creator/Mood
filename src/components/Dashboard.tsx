@@ -12,9 +12,9 @@ import {
   ZAxis,
 } from 'recharts'
 import { useEffect, useMemo, useState, type CSSProperties } from 'react'
-import { fillGaps } from '../chartUtils'
+import { fillGaps, flattenActivities } from '../chartUtils'
+import { ActivityFrequency } from './ActivityFrequency'
 import type {
-  ActivityTag,
   CategoryConfig,
   CheckIn,
   DateRangeFilter,
@@ -24,13 +24,6 @@ import type {
 interface DashboardProps {
   checkIns: CheckIn[]
   categories: CategoryConfig[]
-}
-
-interface FlatActivity {
-  categoryId: string
-  categoryLabel: string
-  color: string
-  tag: ActivityTag
 }
 
 const ACTIVITY_Y_KEY = '__activityY'
@@ -47,12 +40,6 @@ function resolveRange(filter: DateRangeFilter): { start: Date; end: Date } | nul
   }
   const days = filter.preset === '7d' ? 7 : filter.preset === '30d' ? 30 : 90
   return { start: startOfDay(subDays(now, days - 1)), end: endOfDay(now) }
-}
-
-interface DotProps {
-  cx?: number
-  cy?: number
-  payload?: Record<string, unknown>
 }
 
 export function Dashboard({ checkIns, categories }: DashboardProps) {
@@ -77,26 +64,15 @@ export function Dashboard({ checkIns, categories }: DashboardProps) {
     end: null,
   })
 
-  const allActivities: FlatActivity[] = useMemo(
-    () =>
-      categories.flatMap((c) =>
-        c.activities.map((tag) => ({
-          categoryId: c.id,
-          categoryLabel: c.label,
-          color: c.color,
-          tag,
-        })),
-      ),
-    [categories],
-  )
+  const allActivities = useMemo(() => flattenActivities(categories), [categories])
 
   const selectedActivity =
-    allActivities.find((a) => a.tag.id === selectedActivityId) ?? null
+    allActivities.find((a) => a.id === selectedActivityId) ?? null
 
   useEffect(() => {
     if (
       selectedActivityId &&
-      !allActivities.some((a) => a.tag.id === selectedActivityId)
+      !allActivities.some((a) => a.id === selectedActivityId)
     ) {
       setSelectedActivityId(null)
     }
@@ -124,9 +100,8 @@ export function Dashboard({ checkIns, categories }: DashboardProps) {
     for (const cat of scaleCategories) {
       const raw = filtered.map((c) => c.entries[cat.id]?.value ?? null)
       const filledSeries = fillGaps(raw)
-      raw.forEach((value, i) => {
-        rows[i][cat.id] = filledSeries[i]
-        rows[i][`${cat.id}__real`] = value !== null
+      filledSeries.forEach((value, i) => {
+        rows[i][cat.id] = value
       })
     }
 
@@ -137,7 +112,7 @@ export function Dashboard({ checkIns, categories }: DashboardProps) {
       const moodFilled = fillGaps(moodRaw)
       filtered.forEach((c, i) => {
         const entry = c.entries[selectedActivity.categoryId]
-        const logged = entry?.activityIds.includes(selectedActivity.tag.id)
+        const logged = entry?.activityIds.includes(selectedActivity.id)
         rows[i][ACTIVITY_Y_KEY] = logged ? moodFilled[i] : null
       })
     }
@@ -235,23 +210,23 @@ export function Dashboard({ checkIns, categories }: DashboardProps) {
               </button>
               {allActivities.map((act) => (
                 <button
-                  key={act.tag.id}
+                  key={act.id}
                   type="button"
-                  className={`chip chip-event ${selectedActivityId === act.tag.id ? 'is-active' : ''}`}
+                  className={`chip chip-event ${selectedActivityId === act.id ? 'is-active' : ''}`}
                   style={
-                    selectedActivityId === act.tag.id
+                    selectedActivityId === act.id
                       ? ({ '--chip-accent': act.color } as CSSProperties)
                       : undefined
                   }
-                  onClick={() => setSelectedActivityId(act.tag.id)}
-                  aria-pressed={selectedActivityId === act.tag.id}
+                  onClick={() => setSelectedActivityId(act.id)}
+                  aria-pressed={selectedActivityId === act.id}
                 >
                   <span
                     className="chip-dot"
                     style={{ background: act.color }}
                     aria-hidden
                   />
-                  {act.categoryLabel}: {act.tag.label}
+                  {act.categoryLabel}: {act.label}
                 </button>
               ))}
             </div>
@@ -366,22 +341,15 @@ export function Dashboard({ checkIns, categories }: DashboardProps) {
                     name={cat.label}
                     stroke={cat.color}
                     strokeWidth={2.5}
+                    dot={false}
                     activeDot={{ r: 5 }}
                     connectNulls
-                    dot={(props: DotProps) => {
-                      const { cx, cy, payload } = props
-                      const isReal = payload?.[`${cat.id}__real`] === true
-                      if (!isReal || cx === undefined || cy === undefined) {
-                        return <g />
-                      }
-                      return <circle cx={cx} cy={cy} r={3.5} fill={cat.color} />
-                    }}
                   />
                 ) : null,
               )}
               {selectedActivity ? (
                 <Scatter
-                  name={`${selectedActivity.categoryLabel}: ${selectedActivity.tag.label}`}
+                  name={`${selectedActivity.categoryLabel}: ${selectedActivity.label}`}
                   dataKey={ACTIVITY_Y_KEY}
                   fill={selectedActivity.color}
                   stroke="#fff"
@@ -401,9 +369,11 @@ export function Dashboard({ checkIns, categories }: DashboardProps) {
           ? ` · ${activeCatCount} categor${activeCatCount === 1 ? 'y' : 'ies'}`
           : ''}
         {selectedActivity
-          ? ` · ${selectedActivity.tag.label} (${activityPointCount} point${activityPointCount === 1 ? '' : 's'})`
+          ? ` · ${selectedActivity.label} (${activityPointCount} point${activityPointCount === 1 ? '' : 's'})`
           : ''}
       </p>
+
+      <ActivityFrequency checkIns={filtered} activities={allActivities} />
     </section>
   )
 }
