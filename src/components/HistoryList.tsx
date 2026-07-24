@@ -1,23 +1,29 @@
 import { format, parseISO } from 'date-fns'
 import { useState, type FormEvent } from 'react'
-import { CATEGORIES } from '../constants'
 import {
-  emptyRatings,
-  hasAnyRating,
+  emptyEntries,
+  hasAnyData,
+  type CategoryConfig,
+  type CategoryEntry,
   type CheckIn,
-  type CheckInRatings,
-  type CategoryKey,
 } from '../types'
 import { CategorySlider } from './CategorySlider'
 
 interface HistoryListProps {
   checkIns: CheckIn[]
+  categories: CategoryConfig[]
   onUpdate: (checkIn: CheckIn) => void
   onDelete: (id: string) => void
 }
 
-export function HistoryList({ checkIns, onUpdate, onDelete }: HistoryListProps) {
+export function HistoryList({
+  checkIns,
+  categories,
+  onUpdate,
+  onDelete,
+}: HistoryListProps) {
   const [editing, setEditing] = useState<CheckIn | null>(null)
+  const categoryMap = Object.fromEntries(categories.map((c) => [c.id, c]))
 
   return (
     <section className="history">
@@ -62,25 +68,52 @@ export function HistoryList({ checkIns, onUpdate, onDelete }: HistoryListProps) 
                 </div>
               </div>
               <div className="history-ratings">
-                {CATEGORIES.map((cat) => {
-                  const r = item.ratings[cat.key]
+                {categories.map((cat) => {
+                  const entry = item.entries[cat.id]
+                  if (!entry) return null
+                  const hasContent =
+                    entry.value !== null ||
+                    entry.eventIds.length > 0 ||
+                    entry.notes.trim()
+                  if (!hasContent) return null
+                  const eventLabels = entry.eventIds
+                    .map((id) => cat.eventTags.find((t) => t.id === id)?.label)
+                    .filter(Boolean)
                   return (
-                    <div key={cat.key} className="history-rating">
+                    <div key={cat.id} className="history-rating">
                       <span
                         className="chip-dot"
                         style={{ background: cat.color }}
                         aria-hidden
                       />
-                      <span className="history-rating__label">{cat.shortLabel}</span>
-                      <strong>{r.value ?? '—'}</strong>
-                      {r.value !== null && r.notes ? (
-                        <span className="history-rating__notes" title={r.notes}>
-                          {r.notes}
-                        </span>
-                      ) : null}
+                      <span className="history-rating__label">{cat.label}</span>
+                      <strong>{entry.value ?? '—'}</strong>
+                      <span className="history-rating__notes">
+                        {eventLabels.length > 0 && (
+                          <span className="history-events">
+                            {eventLabels.join(' · ')}
+                          </span>
+                        )}
+                        {entry.notes ? (
+                          <span title={entry.notes}>
+                            {eventLabels.length > 0 ? ' — ' : ''}
+                            {entry.notes}
+                          </span>
+                        ) : null}
+                      </span>
                     </div>
                   )
                 })}
+                {/* Orphaned entries from removed categories */}
+                {Object.entries(item.entries)
+                  .filter(([id]) => !categoryMap[id])
+                  .map(([id, entry]) => (
+                    <div key={id} className="history-rating">
+                      <span className="chip-dot" aria-hidden />
+                      <span className="history-rating__label">{id}</span>
+                      <strong>{entry.value ?? '—'}</strong>
+                    </div>
+                  ))}
               </div>
             </li>
           ))}
@@ -90,6 +123,7 @@ export function HistoryList({ checkIns, onUpdate, onDelete }: HistoryListProps) 
       {editing && (
         <EditModal
           checkIn={editing}
+          categories={categories}
           onClose={() => setEditing(null)}
           onSave={(next) => {
             onUpdate(next)
@@ -103,39 +137,58 @@ export function HistoryList({ checkIns, onUpdate, onDelete }: HistoryListProps) 
 
 interface EditModalProps {
   checkIn: CheckIn
+  categories: CategoryConfig[]
   onClose: () => void
   onSave: (checkIn: CheckIn) => void
 }
 
-function EditModal({ checkIn, onClose, onSave }: EditModalProps) {
+function EditModal({ checkIn, categories, onClose, onSave }: EditModalProps) {
   const [timestamp, setTimestamp] = useState(
     format(parseISO(checkIn.timestamp), "yyyy-MM-dd'T'HH:mm"),
   )
-  const [ratings, setRatings] = useState<CheckInRatings>(
-    structuredClone(checkIn.ratings),
-  )
+  const [entries, setEntries] = useState<Record<string, CategoryEntry>>(() => {
+    const base = emptyEntries(categories)
+    for (const cat of categories) {
+      if (checkIn.entries[cat.id]) {
+        base[cat.id] = structuredClone(checkIn.entries[cat.id])
+      }
+    }
+    return base
+  })
 
-  function updateCategory(key: CategoryKey, rating: CheckInRatings[CategoryKey]) {
-    setRatings((prev) => ({ ...prev, [key]: rating }))
+  function updateEntry(id: string, entry: CategoryEntry) {
+    setEntries((prev) => ({ ...prev, [id]: entry }))
   }
 
   function handleSave(e: FormEvent) {
     e.preventDefault()
-    if (!hasAnyRating(ratings)) return
+    if (!hasAnyData(entries)) return
 
-    const clean = emptyRatings()
-    for (const key of Object.keys(ratings) as CategoryKey[]) {
-      const r = ratings[key]
-      clean[key] =
-        r.value === null
-          ? { value: null, notes: '' }
-          : { value: r.value, notes: r.notes.trim() }
+    const clean: Record<string, CategoryEntry> = {}
+    for (const cat of categories) {
+      const entry = entries[cat.id]
+      if (!entry) continue
+      const validEventIds = entry.eventIds.filter((id) =>
+        cat.eventTags.some((t) => t.id === id),
+      )
+      if (
+        entry.value === null &&
+        validEventIds.length === 0 &&
+        !entry.notes.trim()
+      ) {
+        continue
+      }
+      clean[cat.id] = {
+        value: entry.value,
+        notes: entry.notes.trim(),
+        eventIds: validEventIds,
+      }
     }
 
     onSave({
       ...checkIn,
       timestamp: new Date(timestamp).toISOString(),
-      ratings: clean,
+      entries: clean,
     })
   }
 
@@ -165,12 +218,12 @@ function EditModal({ checkIn, onClose, onSave }: EditModalProps) {
             />
           </label>
           <div className="category-stack">
-            {CATEGORIES.map((cat) => (
+            {categories.map((cat) => (
               <CategorySlider
-                key={cat.key}
-                categoryKey={cat.key}
-                rating={ratings[cat.key]}
-                onChange={(rating) => updateCategory(cat.key, rating)}
+                key={cat.id}
+                category={cat}
+                entry={entries[cat.id] ?? { value: null, notes: '', eventIds: [] }}
+                onChange={(entry) => updateEntry(cat.id, entry)}
               />
             ))}
           </div>
@@ -181,7 +234,7 @@ function EditModal({ checkIn, onClose, onSave }: EditModalProps) {
             <button
               type="submit"
               className="btn btn-primary"
-              disabled={!hasAnyRating(ratings)}
+              disabled={!hasAnyData(entries)}
             >
               Save changes
             </button>

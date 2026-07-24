@@ -1,59 +1,79 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { v4 as uuidv4 } from 'uuid'
-import { CATEGORIES } from '../constants'
 import {
-  emptyRatings,
-  hasAnyRating,
+  emptyEntries,
+  hasAnyData,
+  type CategoryConfig,
+  type CategoryEntry,
   type CheckIn,
-  type CheckInRatings,
-  type CategoryKey,
 } from '../types'
 import { CategorySlider } from './CategorySlider'
 
 interface CheckInFormProps {
+  categories: CategoryConfig[]
   onSubmit: (checkIn: CheckIn) => void
 }
 
-export function CheckInForm({ onSubmit }: CheckInFormProps) {
-  const [ratings, setRatings] = useState<CheckInRatings>(emptyRatings)
+export function CheckInForm({ categories, onSubmit }: CheckInFormProps) {
+  const [entries, setEntries] = useState(() => emptyEntries(categories))
   const [savedFlash, setSavedFlash] = useState(false)
 
-  function updateCategory(key: CategoryKey, rating: CheckInRatings[CategoryKey]) {
-    setRatings((prev) => ({ ...prev, [key]: rating }))
+  useEffect(() => {
+    setEntries((prev) => {
+      const next = emptyEntries(categories)
+      for (const cat of categories) {
+        if (prev[cat.id]) next[cat.id] = prev[cat.id]
+      }
+      return next
+    })
+  }, [categories])
+
+  function updateEntry(id: string, entry: CategoryEntry) {
+    setEntries((prev) => ({ ...prev, [id]: entry }))
   }
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault()
-    if (!hasAnyRating(ratings)) return
+    if (!hasAnyData(entries)) return
 
-    const clean: CheckInRatings = emptyRatings()
-    for (const key of Object.keys(ratings) as CategoryKey[]) {
-      const r = ratings[key]
-      clean[key] =
-        r.value === null
-          ? { value: null, notes: '' }
-          : { value: r.value, notes: r.notes.trim() }
+    const clean: Record<string, CategoryEntry> = {}
+    for (const cat of categories) {
+      const entry = entries[cat.id] ?? emptyEntries(categories)[cat.id]
+      const validEventIds = entry.eventIds.filter((id) =>
+        cat.eventTags.some((t) => t.id === id),
+      )
+      if (entry.value === null && validEventIds.length === 0 && !entry.notes.trim()) {
+        continue
+      }
+      clean[cat.id] = {
+        value: entry.value,
+        notes: entry.notes.trim(),
+        eventIds: validEventIds,
+      }
     }
 
     onSubmit({
       id: uuidv4(),
       timestamp: new Date().toISOString(),
-      ratings: clean,
+      entries: clean,
     })
 
-    setRatings(emptyRatings())
+    setEntries(emptyEntries(categories))
     setSavedFlash(true)
     window.setTimeout(() => setSavedFlash(false), 1800)
   }
 
-  const canSubmit = hasAnyRating(ratings)
+  const canSubmit = hasAnyData(entries)
 
   return (
     <form className="checkin-form" onSubmit={handleSubmit}>
       <header className="panel-header">
         <div>
           <h2>New check-in</h2>
-          <p>Log what you want — skip anything that doesn’t apply right now.</p>
+          <p>
+            Rate what matters, tap custom events, skip the rest. Add event buttons
+            in Settings.
+          </p>
         </div>
         {savedFlash && (
           <span className="save-toast" role="status">
@@ -63,12 +83,12 @@ export function CheckInForm({ onSubmit }: CheckInFormProps) {
       </header>
 
       <div className="category-stack">
-        {CATEGORIES.map((cat) => (
+        {categories.map((cat) => (
           <CategorySlider
-            key={cat.key}
-            categoryKey={cat.key}
-            rating={ratings[cat.key]}
-            onChange={(rating) => updateCategory(cat.key, rating)}
+            key={cat.id}
+            category={cat}
+            entry={entries[cat.id] ?? { value: null, notes: '', eventIds: [] }}
+            onChange={(entry) => updateEntry(cat.id, entry)}
           />
         ))}
       </div>
@@ -77,7 +97,7 @@ export function CheckInForm({ onSubmit }: CheckInFormProps) {
         <button
           type="button"
           className="btn btn-ghost"
-          onClick={() => setRatings(emptyRatings())}
+          onClick={() => setEntries(emptyEntries(categories))}
         >
           Reset
         </button>

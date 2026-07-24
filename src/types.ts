@@ -1,16 +1,29 @@
-export type CategoryKey = 'mood' | 'exercise' | 'wellbeing' | 'energy'
-
-export interface CategoryRating {
-  value: number | null
-  notes: string
+export interface EventTag {
+  id: string
+  label: string
 }
 
-export type CheckInRatings = Record<CategoryKey, CategoryRating>
+export interface CategoryConfig {
+  id: string
+  label: string
+  color: string
+  description: string
+  lowLabel: string
+  highLabel: string
+  eventTags: EventTag[]
+}
+
+export interface CategoryEntry {
+  value: number | null
+  notes: string
+  eventIds: string[]
+}
 
 export interface CheckIn {
   id: string
   timestamp: string
-  ratings: CheckInRatings
+  /** Keyed by category id */
+  entries: Record<string, CategoryEntry>
 }
 
 export type DateRangePreset = '7d' | '30d' | '90d' | 'all' | 'custom'
@@ -21,17 +34,24 @@ export interface DateRangeFilter {
   end: string | null
 }
 
-export function emptyRatings(): CheckInRatings {
-  return {
-    mood: { value: null, notes: '' },
-    exercise: { value: null, notes: '' },
-    wellbeing: { value: null, notes: '' },
-    energy: { value: null, notes: '' },
-  }
+export interface AppSettings {
+  categories: CategoryConfig[]
 }
 
-export function hasAnyRating(ratings: CheckInRatings): boolean {
-  return (Object.keys(ratings) as CategoryKey[]).some(
-    (key) => ratings[key].value !== null,
+export function emptyEntry(): CategoryEntry {
+  return { value: null, notes: '', eventIds: [] }
+}
+
+export function emptyEntries(categories: CategoryConfig[]): Record<string, CategoryEntry> {
+  return Object.fromEntries(categories.map((c) => [c.id, emptyEntry()]))
+}
+
+export function hasAnyData(entries: Record<string, CategoryEntry>): boolean {
+  return Object.values(entries).some(
+    (e) => e.value !== null || e.eventIds.length > 0 || e.notes.trim().length > 0,
   )
+}
+
+export function sortCategories(categories: CategoryConfig[]): CategoryConfig[] {
+  return [...categories]
 }

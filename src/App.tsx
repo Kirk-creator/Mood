@@ -2,13 +2,15 @@ import { useState } from 'react'
 import { CheckInForm } from './components/CheckInForm'
 import { Dashboard } from './components/Dashboard'
 import { HistoryList } from './components/HistoryList'
-import { useCheckIns } from './hooks/useCheckIns'
+import { SettingsPanel } from './components/SettingsPanel'
+import { useCheckIns, useSettings } from './hooks/useCheckIns'
 import './App.css'
 
-type View = 'checkin' | 'trends' | 'history'
+type View = 'checkin' | 'trends' | 'history' | 'settings'
 
 export default function App() {
   const { checkIns, ready, add, update, remove } = useCheckIns()
+  const { settings, updateSettings } = useSettings()
   const [view, setView] = useState<View>('checkin')
 
   return (
@@ -28,6 +30,7 @@ export default function App() {
               ['checkin', 'Check-in'],
               ['trends', 'Trends'],
               ['history', 'History'],
+              ['settings', 'Settings'],
             ] as const
           ).map(([id, label]) => (
             <button
@@ -47,10 +50,22 @@ export default function App() {
       </header>
 
       <main className="main">
-        {view === 'checkin' && <CheckInForm onSubmit={add} />}
-        {view === 'trends' && <Dashboard checkIns={checkIns} />}
+        {view === 'checkin' && (
+          <CheckInForm categories={settings.categories} onSubmit={add} />
+        )}
+        {view === 'trends' && (
+          <Dashboard checkIns={checkIns} categories={settings.categories} />
+        )}
         {view === 'history' && (
-          <HistoryList checkIns={checkIns} onUpdate={update} onDelete={remove} />
+          <HistoryList
+            checkIns={checkIns}
+            categories={settings.categories}
+            onUpdate={update}
+            onDelete={remove}
+          />
+        )}
+        {view === 'settings' && (
+          <SettingsPanel settings={settings} onChange={updateSettings} />
         )}
       </main>
 

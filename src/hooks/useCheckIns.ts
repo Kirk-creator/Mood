@@ -3,9 +3,11 @@ import {
   createCheckIn,
   deleteCheckIn,
   loadCheckIns,
+  loadSettings,
+  saveSettings,
   updateCheckIn,
 } from '../storage'
-import type { CheckIn } from '../types'
+import type { AppSettings, CheckIn } from '../types'
 
 export function useCheckIns() {
   const [checkIns, setCheckIns] = useState<CheckIn[]>([])
@@ -29,4 +31,21 @@ export function useCheckIns() {
   }, [])
 
   return { checkIns, ready, add, update, remove }
+}
+
+export function useSettings() {
+  const [settings, setSettings] = useState<AppSettings>(() => loadSettings())
+  const [ready, setReady] = useState(false)
+
+  useEffect(() => {
+    setSettings(loadSettings())
+    setReady(true)
+  }, [])
+
+  const updateSettings = useCallback((next: AppSettings) => {
+    saveSettings(next)
+    setSettings(next)
+  }, [])
+
+  return { settings, ready, updateSettings }
 }

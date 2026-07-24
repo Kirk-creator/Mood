@@ -5,11 +5,13 @@ Client-side mood, activity, and health correlation tracker. Log flexible multi-t
 ## Features
 
 - **Multiple daily check-ins** — log as often as you like
-- **1–10 scales** with slider + number input per category
-- **Skip any category** and add optional notes
-- **Interactive line chart** with category toggles and date-range filters (7 / 30 / 90 days, all time, or custom)
+- **12 categories** — Mood, Exercise, Well-being, Energy, Food, Social, Health, Hobbies, Events, Sleep, Weather, Other
+- **1–10 scales** with slider + number input; skip any rating; optional notes
+- **Custom event buttons** per category (e.g. Health → Sick, Headache) — add, rename, or remove in Settings
+- **Reorder categories** and **change colors** in Settings
+- **Interactive chart** with category lines, event markers, and date-range filters
 - **Full CRUD** — edit or delete past check-ins
-- **LocalStorage persistence** — no backend required
+- **LocalStorage persistence** — nothing is uploaded; existing check-ins are migrated automatically
 
 ## Live site
 
