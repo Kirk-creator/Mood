@@ -8,7 +8,7 @@ Data is cached in `localStorage` per account. With Supabase configured, users si
 
 - **Email sign up & log in** — each account loads its own Supabase check-ins and settings
 - **Multiple daily check-ins** — log as often as you like
-- **Configurable categories** — add, remove, reorder, and recolor; each can optionally use a 1–10 bubble scale
+- **Configurable categories** — new accounts start with Mood, Energy, Health, and Anxiety (1–10 scales); add more anytime and every enabled scale shows on Trends
 - **Custom activities** per category — add them on the check-in card or in Settings
 - **Trends chart** — category rating lines plus one activity at a time as dots on the Mood line
 - **Activity frequency chart** — bar chart of how often an activity happens, grouped by hour of day, day of week, or date
