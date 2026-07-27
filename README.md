@@ -40,10 +40,11 @@ The deploy workflow uses `environment: github-pages` and reads those from enviro
 
 ### One-time Supabase setup
 
-1. Run `supabase/migrations/001_pulse.sql` in the Supabase SQL editor.
-2. Enable **Authentication → Providers → Anonymous** sign-ins.
-3. Keep `SUPABASE_URL` + `SUPABASE_ANON_KEY` in Doppler (already synced to `github-pages`).
-4. After deploy succeeds, open the live site once — it uploads existing `localStorage` check-ins into Supabase.
+1. **Enable the Data API** — Project Settings → Data API (or Integrations → Data API). Turn it **on** and keep `public` in the exposed schemas. If PostgREST logs say `pg_pgrst_no_exposed_schemas`, the Data API is disabled.
+2. Run `supabase/migrations/001_pulse.sql` in the Supabase SQL editor.
+3. Enable **Authentication → Providers → Anonymous** sign-ins.
+4. Keep `SUPABASE_URL` + `SUPABASE_ANON_KEY` in Doppler (already synced to `github-pages`).
+5. After deploy succeeds, open the live site once — it uploads existing `localStorage` check-ins into Supabase.
 
 Trends/History still render from the local cache; Supabase is the cloud copy in the Table Editor.
 

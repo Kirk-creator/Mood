@@ -58,13 +58,13 @@ export async function hydrateCheckIns(): Promise<CheckIn[]> {
 
   if (error) {
     const detail = error.message || 'unknown error'
-    const paused =
-      /schema cache|PGRST002|upstream connect|connection refused|Could not query the database/i.test(
+    const dataApiDisabled =
+      /schema cache|PGRST002|pg_pgrst_no_exposed_schemas|Could not query the database/i.test(
         detail,
       )
     throw new CloudSyncError(
-      paused
-        ? `Supabase database is unreachable (${detail}). Open the Supabase project dashboard and restore/unpause the database, then refresh.`
+      dataApiDisabled
+        ? `Supabase Data API/PostgREST is disabled or broken (${detail}). In the Supabase dashboard enable Project Settings → Data API (expose the public schema), then refresh.`
         : `Could not read check_ins (${detail}). Run supabase/migrations/001_pulse.sql in the SQL editor.`,
     )
   }
