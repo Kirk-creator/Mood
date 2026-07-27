@@ -6,11 +6,15 @@ import {
   loadLegacyGuestCheckIns,
   loadLegacyGuestSettings,
   loadSettings,
+  applyPreferredStarterCategories,
+  mergeSettingsActivities,
   normalizeCheckIn,
   normalizeSettings,
+  recoverActivitiesFromCheckIns,
   saveCheckIns,
   saveSettings,
   setStorageUserId,
+  settingsEqual,
 } from '../storage'
 import { getSupabase, requireUserId } from './supabase'
 
@@ -46,7 +50,16 @@ export async function hydrateAccount(userId: string): Promise<{
 }> {
   setStorageUserId(userId)
   const checkIns = await hydrateCheckIns()
-  const settings = await hydrateSettings()
+  let settings = await hydrateSettings()
+  const restored = recoverActivitiesFromCheckIns(
+    applyPreferredStarterCategories(settings),
+    checkIns,
+  )
+  if (!settingsEqual(settings, restored)) {
+    settings = restored
+    saveSettings(settings)
+    await pushSettings(settings)
+  }
   return { checkIns, settings }
 }
 
@@ -134,6 +147,15 @@ export async function hydrateSettings(): Promise<AppSettings> {
   if (!userId) return defaultSettings()
   setStorageUserId(userId)
 
+  const guest = loadLegacyGuestSettings()
+  const local = loadSettings()
+  const activityDonor =
+    guest && guest.categories.some((c) => c.activities.length > 0)
+      ? guest
+      : local.categories.some((c) => c.activities.length > 0)
+        ? local
+        : guest
+
   const { data, error } = await supabase
     .from('app_settings')
     .select('categories')
@@ -142,21 +164,32 @@ export async function hydrateSettings(): Promise<AppSettings> {
 
   if (error) {
     console.warn('Failed to load settings from Supabase', error.message)
-    return loadSettings()
+    return mergeSettingsActivities(local, activityDonor)
   }
 
   if (data?.categories != null) {
     const remote = normalizeSettings({ categories: data.categories })
-    saveSettings(remote)
-    return remote
+    const merged = applyPreferredStarterCategories(
+      mergeSettingsActivities(remote, activityDonor),
+    )
+    saveSettings(merged)
+    if (!settingsEqual(remote, merged)) {
+      await pushSettings(merged)
+    }
+    return merged
   }
 
-  const local = loadSettings()
-  const guest = loadLegacyGuestSettings()
-  const seed =
-    local.categories.length > 0
+  const seedBase =
+    local.categories.some((c) => c.activities.length > 0)
       ? local
-      : (guest ?? defaultSettings())
+      : guest && guest.categories.some((c) => c.activities.length > 0)
+        ? guest
+        : local.categories.length > 0
+          ? local
+          : defaultSettings()
+  const seed = applyPreferredStarterCategories(
+    mergeSettingsActivities(seedBase, activityDonor),
+  )
 
   const { error: insertError } = await supabase.from('app_settings').upsert({
     user_id: userId,

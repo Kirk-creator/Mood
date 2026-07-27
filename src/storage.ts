@@ -1,9 +1,12 @@
 import {
   CHECKINS_KEY,
+  DEFAULT_CATEGORIES,
   LEGACY_CHECKINS_KEY,
+  LEGACY_STOCK_CATEGORY_IDS,
   SETTINGS_KEY,
   defaultSettings,
 } from './constants'
+import { activityPaletteColor } from './chartUtils'
 import type {
   ActivityTag,
   AppSettings,
@@ -228,4 +231,116 @@ export function loadLegacyGuestSettings(): AppSettings | null {
   } catch {
     return null
   }
+}
+
+/** Prefer primary categories; fill empty activity lists from fallback by id/label. */
+export function mergeSettingsActivities(
+  primary: AppSettings,
+  fallback: AppSettings | null,
+): AppSettings {
+  if (!fallback) return primary
+  const byId = new Map(fallback.categories.map((c) => [c.id, c]))
+  const byLabel = new Map(
+    fallback.categories.map((c) => [c.label.trim().toLowerCase(), c]),
+  )
+
+  return {
+    categories: primary.categories.map((cat) => {
+      if (cat.activities.length > 0) return cat
+      const donor =
+        byId.get(cat.id) ?? byLabel.get(cat.label.trim().toLowerCase())
+      if (!donor || donor.activities.length === 0) return cat
+      return { ...cat, activities: donor.activities.map((a) => ({ ...a })) }
+    }),
+  }
+}
+
+/**
+ * Rebuild missing activity definitions referenced by check-ins so Trends /
+ * Check-in chips don't disappear after a settings wipe.
+ */
+export function recoverActivitiesFromCheckIns(
+  settings: AppSettings,
+  checkIns: CheckIn[],
+): AppSettings {
+  const knownIds = new Set(
+    settings.categories.flatMap((c) => c.activities.map((a) => a.id)),
+  )
+  const orphansByCat = new Map<string, string[]>()
+
+  for (const checkIn of checkIns) {
+    for (const [catId, entry] of Object.entries(checkIn.entries)) {
+      for (const activityId of entry.activityIds) {
+        if (knownIds.has(activityId)) continue
+        const list = orphansByCat.get(catId) ?? []
+        if (!list.includes(activityId)) list.push(activityId)
+        orphansByCat.set(catId, list)
+      }
+    }
+  }
+
+  if (orphansByCat.size === 0) return settings
+
+  return {
+    categories: settings.categories.map((cat) => {
+      const orphanIds = orphansByCat.get(cat.id)
+      if (!orphanIds || orphanIds.length === 0) return cat
+      const extras: ActivityTag[] = orphanIds.map((id, index) => ({
+        id,
+        label: `Saved activity ${cat.activities.length + index + 1}`,
+        color: activityPaletteColor(id, cat.color),
+      }))
+      return { ...cat, activities: [...cat.activities, ...extras] }
+    }),
+  }
+}
+
+export function settingsEqual(a: AppSettings, b: AppSettings): boolean {
+  return JSON.stringify(a) === JSON.stringify(b)
+}
+
+/**
+ * Slim old stock category packs down to Mood / Energy / Health / Anxiety,
+ * keeping activities on those starters and preserving any other stock
+ * categories that still have activities.
+ */
+export function applyPreferredStarterCategories(
+  settings: AppSettings,
+): AppSettings {
+  const stock = new Set<string>([...LEGACY_STOCK_CATEGORY_IDS, 'anxiety'])
+  if (!settings.categories.every((c) => stock.has(c.id))) return settings
+
+  const preferred = DEFAULT_CATEGORIES.map((c) => c.id)
+  const alreadyPreferred =
+    settings.categories.length === preferred.length &&
+    preferred.every((id) => settings.categories.some((c) => c.id === id))
+  if (alreadyPreferred) {
+    // Ensure scales stay on for starters.
+    return {
+      categories: settings.categories.map((c) =>
+        preferred.includes(c.id) ? { ...c, hasScale: true } : c,
+      ),
+    }
+  }
+
+  const byId = new Map(settings.categories.map((c) => [c.id, c]))
+  const starters = DEFAULT_CATEGORIES.map((def) => {
+    const existing = byId.get(def.id)
+    if (!existing) return { ...def, activities: [] }
+    return {
+      ...def,
+      label: existing.label || def.label,
+      color: existing.color || def.color,
+      description: existing.description || def.description,
+      lowLabel: existing.lowLabel || def.lowLabel,
+      highLabel: existing.highLabel || def.highLabel,
+      hasScale: true,
+      activities: existing.activities.map((a) => ({ ...a })),
+    }
+  })
+  const extras = settings.categories.filter(
+    (c) => !preferred.includes(c.id) && c.activities.length > 0,
+  )
+
+  return { categories: [...starters, ...extras] }
 }

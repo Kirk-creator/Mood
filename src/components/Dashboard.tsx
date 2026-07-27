@@ -148,8 +148,8 @@ export function Dashboard({ checkIns, categories }: DashboardProps) {
         <div>
           <h2>Trends</h2>
           <p>
-            Compare category ratings over time. Open a category to pick one
-            activity to mark as dots along the Mood line.
+            Every category with a 1–10 scale appears on the graph. Open a
+            category to pick one activity to mark as dots along the Mood line.
           </p>
         </div>
       </header>
