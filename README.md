@@ -23,33 +23,39 @@ Data is always cached in `localStorage`. When Supabase credentials are provided 
 
 Direct build URL: **https://kirk-creator.github.io/Mood/docs/**
 
-## Secrets (Doppler)
+## Secrets (Doppler → GitHub)
 
-This project expects Supabase public credentials from Doppler (or a local `.env`):
+Doppler’s **GitHub integration** copies secrets into this repo’s **Actions secrets**.
+The deploy workflow passes them into `npm run build` so Vite can bake them into the static Pages site.
 
-| Doppler / env name | Also accepted |
+Expected secret names in Doppler (and therefore in GitHub Actions):
+
+| Doppler / GitHub secret | Also accepted |
 | --- | --- |
 | `SUPABASE_URL` | `VITE_SUPABASE_URL` |
 | `SUPABASE_ANON` | `SUPABASE_ANON_KEY`, `VITE_SUPABASE_ANON`, `VITE_SUPABASE_ANON_KEY` |
 
-`vite.config.ts` maps those names onto `import.meta.env.VITE_SUPABASE_*` for the client bundle.
+`vite.config.ts` maps those onto `import.meta.env.VITE_SUPABASE_*` for the browser bundle.
 
 ### One-time Supabase setup
 
 1. Run `supabase/migrations/001_pulse.sql` in the Supabase SQL editor.
 2. Enable **Authentication → Providers → Anonymous** sign-ins.
-3. Store the project URL and anon key in Doppler (names above).
+3. Keep the project URL + anon key in Doppler under the names above.
+4. Confirm Doppler’s GitHub sync targeted this repo, then re-run **Deploy to GitHub Pages**.
+5. Open the live site once — it uploads existing `localStorage` check-ins/settings into Supabase.
 
-### Develop with Doppler
+Trends/History in the app still read your (synced) local cache; Supabase is the cloud copy you see in the Table Editor.
+
+### Develop with Doppler CLI (optional)
 
 ```bash
 npm install
-# link the Doppler project once
 doppler setup
 npm run dev:doppler
 ```
 
-Without Doppler, copy `.env.example` → `.env.local` and run `npm run dev`.
+Without the CLI, copy `.env.example` → `.env.local` and run `npm run dev`.
 
 ## Develop
 
@@ -79,6 +85,4 @@ This repo’s Pages source is **Deploy from a branch → `main` → `/ (root)`**
 
 For a cleaner URL without `/docs`, switch **Settings → Pages → Source** to **GitHub Actions**, or set the branch folder to **`/docs`**.
 
-Pushes to `main` rebuild `docs/` via `.github/workflows/deploy.yml`.
-
-To bake Supabase credentials into the Pages build, add a GitHub Actions secret `DOPPLER_TOKEN` (Doppler service token). The workflow runs `doppler run -- npm run build` when that token is present.
+Pushes to `main` rebuild `docs/` via `.github/workflows/deploy.yml`, injecting whatever Supabase secrets Doppler has synced into GitHub Actions.

@@ -9,6 +9,13 @@ import {
 } from '../storage'
 import { ensureUserId, getSupabase } from './supabase'
 
+export class CloudSyncError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'CloudSyncError'
+  }
+}
+
 function sortCheckIns(checkIns: CheckIn[]): CheckIn[] {
   return [...checkIns].sort(
     (a, b) =>
@@ -25,7 +32,6 @@ function mergeCheckIns(local: CheckIn[], remote: CheckIn[]): CheckIn[] {
       byId.set(item.id, item)
       continue
     }
-    // Prefer the copy with the later check-in timestamp when both exist.
     const existingTs = new Date(existing.timestamp).getTime()
     const remoteTs = new Date(item.timestamp).getTime()
     byId.set(item.id, remoteTs >= existingTs ? item : existing)
@@ -39,7 +45,11 @@ export async function hydrateCheckIns(): Promise<CheckIn[]> {
   if (!supabase) return local
 
   const userId = await ensureUserId()
-  if (!userId) return local
+  if (!userId) {
+    throw new CloudSyncError(
+      'Anonymous sign-in failed. Enable Anonymous provider in Supabase Auth.',
+    )
+  }
 
   const { data, error } = await supabase
     .from('check_ins')
@@ -47,8 +57,9 @@ export async function hydrateCheckIns(): Promise<CheckIn[]> {
     .eq('user_id', userId)
 
   if (error) {
-    console.warn('Failed to load check-ins from Supabase', error.message)
-    return local
+    throw new CloudSyncError(
+      `Could not read check_ins (${error.message}). Run supabase/migrations/001_pulse.sql.`,
+    )
   }
 
   const remote = (data ?? [])
@@ -80,7 +91,9 @@ export async function hydrateCheckIns(): Promise<CheckIn[]> {
       .from('check_ins')
       .upsert(payload, { onConflict: 'id' })
     if (upsertError) {
-      console.warn('Failed to upload local check-ins', upsertError.message)
+      throw new CloudSyncError(
+        `Could not upload local check-ins (${upsertError.message}).`,
+      )
     }
   }
 

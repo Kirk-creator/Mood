@@ -804,6 +804,13 @@
   text-align: center;
 }
 
+.site-footer-hint {
+  margin-top: 0.35rem;
+  color: var(--ink-muted);
+  font-size: 0.75rem;
+  opacity: 0.9;
+}
+
 @keyframes rise {
   from {
     opacity: 0;

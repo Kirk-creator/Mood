@@ -6,6 +6,7 @@ import {
   pushDeleteCheckIn,
   pushSettings,
 } from '../lib/cloudSync'
+import { isSupabaseConfigured } from '../lib/env'
 import {
   createCheckIn,
   deleteCheckIn,
@@ -16,21 +17,44 @@ import {
 } from '../storage'
 import type { AppSettings, CheckIn } from '../types'
 
+export type CloudSyncState =
+  | 'local-only'
+  | 'syncing'
+  | 'synced'
+  | 'error'
+
 export function useCheckIns() {
   const [checkIns, setCheckIns] = useState<CheckIn[]>([])
   const [ready, setReady] = useState(false)
+  const [cloudSync, setCloudSync] = useState<CloudSyncState>(() =>
+    isSupabaseConfigured() ? 'syncing' : 'local-only',
+  )
+  const [cloudError, setCloudError] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
     setCheckIns(loadCheckIns())
     setReady(true)
 
+    if (!isSupabaseConfigured()) {
+      setCloudSync('local-only')
+      return
+    }
+
+    setCloudSync('syncing')
     void hydrateCheckIns()
       .then((next) => {
-        if (!cancelled) setCheckIns(next)
+        if (cancelled) return
+        setCheckIns(next)
+        setCloudSync('synced')
+        setCloudError(null)
       })
       .catch((err: unknown) => {
+        if (cancelled) return
+        const message = err instanceof Error ? err.message : String(err)
         console.warn('Check-in sync failed', err)
+        setCloudSync('error')
+        setCloudError(message)
       })
 
     return () => {
@@ -53,7 +77,7 @@ export function useCheckIns() {
     void pushDeleteCheckIn(id)
   }, [])
 
-  return { checkIns, ready, add, update, remove }
+  return { checkIns, ready, add, update, remove, cloudSync, cloudError }
 }
 
 export function useSettings() {
