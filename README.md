@@ -23,29 +23,29 @@ Data is always cached in `localStorage`. When Supabase credentials are provided 
 
 Direct build URL: **https://kirk-creator.github.io/Mood/docs/**
 
-## Secrets (Doppler → GitHub)
+## Secrets (Doppler → GitHub `github-pages` environment)
 
-Doppler’s **GitHub integration** copies secrets into this repo’s **Actions secrets**.
-The deploy workflow passes them into `npm run build` so Vite can bake them into the static Pages site.
+Doppler sync for this repo is:
 
-Expected secret names in Doppler (and therefore in GitHub Actions):
+`Actions: Kirk-creator / Mood / github-pages / variable syncing`
 
-| Doppler / GitHub secret | Also accepted |
+with names:
+
+| Name | Purpose |
 | --- | --- |
-| `SUPABASE_URL` | `VITE_SUPABASE_URL` |
-| `SUPABASE_ANON` | `SUPABASE_ANON_KEY`, `VITE_SUPABASE_ANON`, `VITE_SUPABASE_ANON_KEY` |
+| `SUPABASE_URL` | Supabase project URL |
+| `SUPABASE_ANON_KEY` | Supabase anon/public key |
 
-`vite.config.ts` maps those onto `import.meta.env.VITE_SUPABASE_*` for the browser bundle.
+The deploy workflow uses `environment: github-pages` and reads those from environment secrets **and** variables, then bakes them into the static Pages build.
 
 ### One-time Supabase setup
 
 1. Run `supabase/migrations/001_pulse.sql` in the Supabase SQL editor.
 2. Enable **Authentication → Providers → Anonymous** sign-ins.
-3. Keep the project URL + anon key in Doppler under the names above.
-4. Confirm Doppler’s GitHub sync targeted this repo, then re-run **Deploy to GitHub Pages**.
-5. Open the live site once — it uploads existing `localStorage` check-ins/settings into Supabase.
+3. Keep `SUPABASE_URL` + `SUPABASE_ANON_KEY` in Doppler (already synced to `github-pages`).
+4. After deploy succeeds, open the live site once — it uploads existing `localStorage` check-ins into Supabase.
 
-Trends/History in the app still read your (synced) local cache; Supabase is the cloud copy you see in the Table Editor.
+Trends/History still render from the local cache; Supabase is the cloud copy in the Table Editor.
 
 ### Develop with Doppler CLI (optional)
 
@@ -85,4 +85,6 @@ This repo’s Pages source is **Deploy from a branch → `main` → `/ (root)`**
 
 For a cleaner URL without `/docs`, switch **Settings → Pages → Source** to **GitHub Actions**, or set the branch folder to **`/docs`**.
 
-Pushes to `main` rebuild `docs/` via `.github/workflows/deploy.yml`, injecting whatever Supabase secrets Doppler has synced into GitHub Actions.
+Pushes to `main` rebuild `docs/` via `.github/workflows/deploy.yml` using the `github-pages` environment (where Doppler syncs `SUPABASE_URL` + `SUPABASE_ANON_KEY`).
+
+If deploy fails on missing credentials, run **Actions → Inspect Actions secrets** (defaults to the `github-pages` environment) to confirm the key names GitHub can see.
