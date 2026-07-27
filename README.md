@@ -44,7 +44,7 @@ The deploy workflow uses `environment: github-pages` and reads those from enviro
 1. **Enable the Data API** — Project Settings → Data API, keep `public` exposed.
 2. Run `supabase/migrations/001_pulse.sql` in the SQL editor.
 3. Enable **Authentication → Providers → Email** (disable email confirmations while testing if you want instant login after sign-up).
-4. Under **Authentication → URL configuration**, set Site URL to your Pages URL (`https://kirk-creator.github.io/Mood/docs/`) and add it to Redirect URLs.
+4. Under **Authentication → URL configuration**, set Site URL to your Pages URL (`https://kirk-creator.github.io/Mood/docs/`) and add it to Redirect URLs (needed for email confirmation and password reset links).
 5. Keep `SUPABASE_URL` + `SUPABASE_ANON_KEY` in Doppler (synced to `github-pages`).
 
 After deploy, open the live site → **Sign up** or **Log in**. That account’s rows in `check_ins` / `app_settings` are what Trends and History show.

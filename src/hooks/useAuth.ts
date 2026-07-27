@@ -4,9 +4,11 @@ import { isSupabaseConfigured } from '../lib/env'
 import {
   getSession,
   getSupabase,
+  requestPasswordReset,
   signInWithEmail,
   signOut,
   signUpWithEmail,
+  updatePassword,
 } from '../lib/supabase'
 
 export type AuthStatus = 'loading' | 'signed-out' | 'signed-in' | 'local'
@@ -19,6 +21,7 @@ export function useAuth() {
   const [user, setUser] = useState<User | null>(null)
   const [session, setSession] = useState<Session | null>(null)
   const [authMessage, setAuthMessage] = useState<string | null>(null)
+  const [passwordRecovery, setPasswordRecovery] = useState(false)
 
   useEffect(() => {
     if (!configured) {
@@ -41,7 +44,10 @@ export function useAuth() {
       setStatus(next ? 'signed-in' : 'signed-out')
     })
 
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, next) => {
+    const { data: sub } = supabase.auth.onAuthStateChange((event, next) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        setPasswordRecovery(true)
+      }
       setSession(next)
       setUser(next?.user ?? null)
       setStatus(next ? 'signed-in' : 'signed-out')
@@ -65,6 +71,7 @@ export function useAuth() {
       setAuthMessage(message)
       return { ok: false as const, message }
     }
+    setPasswordRecovery(false)
     return { ok: true as const }
   }, [])
 
@@ -81,11 +88,38 @@ export function useAuth() {
       setAuthMessage(message)
       return { ok: false as const, message, needsConfirmation: true as const }
     }
+    setPasswordRecovery(false)
+    return { ok: true as const }
+  }, [])
+
+  const requestReset = useCallback(async (email: string) => {
+    setAuthMessage(null)
+    const { error } = await requestPasswordReset(email)
+    if (error) {
+      setAuthMessage(error.message)
+      return { ok: false as const, message: error.message }
+    }
+    const message =
+      'If an account exists for that email, a reset link is on the way.'
+    setAuthMessage(message)
+    return { ok: true as const, message }
+  }, [])
+
+  const completePasswordReset = useCallback(async (password: string) => {
+    setAuthMessage(null)
+    const { error } = await updatePassword(password)
+    if (error) {
+      setAuthMessage(error.message)
+      return { ok: false as const, message: error.message }
+    }
+    setPasswordRecovery(false)
+    setAuthMessage('Password updated. You’re signed in.')
     return { ok: true as const }
   }, [])
 
   const logOut = useCallback(async () => {
     setAuthMessage(null)
+    setPasswordRecovery(false)
     const error = await signOut()
     if (error) setAuthMessage(error.message)
   }, [])
@@ -97,8 +131,11 @@ export function useAuth() {
     session,
     authMessage,
     setAuthMessage,
+    passwordRecovery,
     signIn,
     signUp,
+    requestReset,
+    completePasswordReset,
     logOut,
   }
 }
