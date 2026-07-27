@@ -14,7 +14,7 @@ import {
 import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { fillGaps, flattenActivities } from '../chartUtils'
 import { ActivityChipGroups } from './ActivityChipGroups'
-import { ActivityFrequency } from './ActivityFrequency'
+import { ActivityInsights } from './ActivityInsights'
 import type {
   CategoryConfig,
   CheckIn,
@@ -395,7 +395,7 @@ export function Dashboard({ checkIns, categories }: DashboardProps) {
           : ''}
       </p>
 
-      <ActivityFrequency checkIns={filtered} activities={allActivities} />
+      <ActivityInsights checkIns={filtered} activities={allActivities} />
     </section>
   )
 }

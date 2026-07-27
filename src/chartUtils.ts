@@ -1,4 +1,3 @@
-import { eachDayOfInterval, format, parseISO } from 'date-fns'
 import type { CategoryConfig, CheckIn } from './types'
 
 /**
@@ -52,7 +51,7 @@ export function flattenActivities(categories: CategoryConfig[]): FlatActivity[] 
   )
 }
 
-/** Stable distinct colors so stacked bars stay readable even within one category. */
+/** Stable distinct colors so activities stay readable even within one category. */
 const ACTIVITY_PALETTE = [
   '#2a9d8f',
   '#e76f51',
@@ -81,115 +80,53 @@ export function nextActivityColor(existingCount: number): string {
   return ACTIVITY_PALETTE[existingCount % ACTIVITY_PALETTE.length]
 }
 
-export type FrequencyGranularity = 'hour' | 'weekday' | 'date'
-
-export interface FrequencyBucket {
-  label: string
+export interface ActivityPair {
+  left: FlatActivity
+  right: FlatActivity
   count: number
 }
 
-/** One row per time bucket; each activity id is a numeric series key. */
-export type FrequencySeriesRow = { label: string } & Record<string, string | number>
-
-const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-
-function hourLabel(hour: number): string {
-  if (hour === 0) return '12a'
-  if (hour === 12) return '12p'
-  return hour < 12 ? `${hour}a` : `${hour - 12}p`
-}
-
-function emptySeriesRow(
-  label: string,
-  activityIds: string[],
-): FrequencySeriesRow {
-  const row: FrequencySeriesRow = { label }
-  for (const id of activityIds) row[id] = 0
-  return row
-}
-
-function addActivityCounts(
-  row: FrequencySeriesRow,
-  checkIn: CheckIn,
-  activityIds: Set<string>,
-): void {
+function activityIdsOnCheckIn(checkIn: CheckIn): string[] {
+  const ids = new Set<string>()
   for (const entry of Object.values(checkIn.entries)) {
-    for (const id of entry.activityIds) {
-      if (activityIds.has(id)) {
-        row[id] = (row[id] as number) + 1
+    for (const id of entry.activityIds) ids.add(id)
+  }
+  return [...ids]
+}
+
+/**
+ * Rank activity pairs that appear together on the same check-in.
+ * Only pairs that co-occur at least twice are returned.
+ */
+export function activityCooccurrences(
+  checkIns: CheckIn[],
+  activities: FlatActivity[],
+  limit = 6,
+): ActivityPair[] {
+  const byId = new Map(activities.map((a) => [a.id, a]))
+  const pairCounts = new Map<string, number>()
+
+  for (const checkIn of checkIns) {
+    const ids = activityIdsOnCheckIn(checkIn)
+      .filter((id) => byId.has(id))
+      .sort()
+    for (let i = 0; i < ids.length; i++) {
+      for (let j = i + 1; j < ids.length; j++) {
+        const key = `${ids[i]}|${ids[j]}`
+        pairCounts.set(key, (pairCounts.get(key) ?? 0) + 1)
       }
     }
   }
-}
 
-/**
- * Count how often each activity was logged, bucketed by hour / weekday / date.
- * Returns one numeric column per activity id for stacked bar charts.
- */
-export function activityFrequencySeries(
-  checkIns: CheckIn[],
-  granularity: FrequencyGranularity,
-  activityIds: string[],
-): FrequencySeriesRow[] {
-  if (activityIds.length === 0) return []
-  const idSet = new Set(activityIds)
-
-  if (granularity === 'hour') {
-    const rows = Array.from({ length: 24 }, (_, hour) =>
-      emptySeriesRow(hourLabel(hour), activityIds),
-    )
-    for (const checkIn of checkIns) {
-      const hour = parseISO(checkIn.timestamp).getHours()
-      addActivityCounts(rows[hour], checkIn, idSet)
-    }
-    return rows
-  }
-
-  if (granularity === 'weekday') {
-    const rows = Array.from({ length: 7 }, (_, day) =>
-      emptySeriesRow(WEEKDAYS[day], activityIds),
-    )
-    for (const checkIn of checkIns) {
-      const day = parseISO(checkIn.timestamp).getDay()
-      addActivityCounts(rows[day], checkIn, idSet)
-    }
-    return rows
-  }
-
-  if (checkIns.length === 0) return []
-
-  const times = checkIns.map((c) => parseISO(c.timestamp))
-  const start = new Date(Math.min(...times.map((t) => t.getTime())))
-  const end = new Date(Math.max(...times.map((t) => t.getTime())))
-
-  const rows = eachDayOfInterval({ start, end }).map((day) =>
-    emptySeriesRow(format(day, 'MMM d'), activityIds),
-  )
-  const indexByLabel = new Map(rows.map((row, i) => [row.label, i]))
-
-  for (const checkIn of checkIns) {
-    const key = format(parseISO(checkIn.timestamp), 'MMM d')
-    const idx = indexByLabel.get(key)
-    if (idx === undefined) continue
-    addActivityCounts(rows[idx], checkIn, idSet)
-  }
-
-  return rows
-}
-
-/**
- * Combined single-series frequency (kept for simpler totals / tests).
- */
-export function activityFrequency(
-  checkIns: CheckIn[],
-  granularity: FrequencyGranularity,
-  activityIds: Set<string>,
-): FrequencyBucket[] {
-  if (activityIds.size === 0) return []
-  const series = activityFrequencySeries(checkIns, granularity, [...activityIds])
-  return series.map((row) => {
-    let count = 0
-    for (const id of activityIds) count += row[id] as number
-    return { label: row.label, count }
-  })
+  return [...pairCounts.entries()]
+    .filter(([, count]) => count >= 2)
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, limit)
+    .flatMap(([key, count]) => {
+      const [leftId, rightId] = key.split('|')
+      const left = byId.get(leftId)
+      const right = byId.get(rightId)
+      if (!left || !right) return []
+      return [{ left, right, count }]
+    })
 }
