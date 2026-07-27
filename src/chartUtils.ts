@@ -44,7 +44,8 @@ export function flattenActivities(categories: CategoryConfig[]): FlatActivity[] 
     c.activities.map((tag) => ({
       categoryId: c.id,
       categoryLabel: c.label,
-      color: tag.color || activityPaletteColor(tag.id, c.color),
+      // Mark activities with their parent category color (Trends, insights, chips).
+      color: c.color,
       id: tag.id,
       label: tag.label,
     })),
