@@ -159,3 +159,41 @@ export async function signOut(): Promise<{ message: string } | null> {
   const { error } = await supabase.auth.signOut()
   return error ? { message: error.message } : null
 }
+
+/** Canonical redirect back into this SPA (used by password recovery emails). */
+export function authRedirectUrl(): string {
+  const url = new URL(window.location.href)
+  url.hash = ''
+  url.search = ''
+  // Keep a trailing slash so Pages project paths resolve consistently.
+  if (!url.pathname.endsWith('/')) {
+    url.pathname = `${url.pathname}/`
+  }
+  return url.toString()
+}
+
+export async function requestPasswordReset(
+  email: string,
+): Promise<{ error: { message: string } | null }> {
+  const supabase = getSupabase()
+  if (!supabase) {
+    return { error: { message: 'Supabase is not configured for this build.' } }
+  }
+
+  const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+    redirectTo: authRedirectUrl(),
+  })
+  return { error: error ? { message: error.message } : null }
+}
+
+export async function updatePassword(
+  password: string,
+): Promise<{ error: { message: string } | null }> {
+  const supabase = getSupabase()
+  if (!supabase) {
+    return { error: { message: 'Supabase is not configured for this build.' } }
+  }
+
+  const { error } = await supabase.auth.updateUser({ password })
+  return { error: error ? { message: error.message } : null }
+}

@@ -973,6 +973,12 @@
   color: var(--accent-strong);
 }
 
+.auth-forgot-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: -0.25rem;
+}
+
 .auth-submit {
   width: 100%;
   margin-top: 0.25rem;

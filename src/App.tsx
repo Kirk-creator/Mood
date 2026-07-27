@@ -26,8 +26,11 @@ export default function App() {
     status,
     user,
     authMessage,
+    passwordRecovery,
     signIn,
     signUp,
+    requestReset,
+    completePasswordReset,
     logOut,
   } = useAuth()
   const userId = user?.id ?? null
@@ -42,7 +45,9 @@ export default function App() {
     cloudSync,
     cloudError,
     retrySync,
-  } = useCheckIns(configured ? userId : null)
+  } = useCheckIns(
+    configured && status === 'signed-in' && !passwordRecovery ? userId : null,
+  )
   const [view, setView] = useState<View>('checkin')
 
   const addActivity = useCallback(
@@ -116,11 +121,14 @@ export default function App() {
     )
   }
 
-  if (configured && status === 'signed-out') {
+  if (configured && (status === 'signed-out' || passwordRecovery)) {
     return (
       <AuthScreen
+        mode={passwordRecovery ? 'reset' : undefined}
         onSignIn={signIn}
         onSignUp={signUp}
+        onRequestReset={requestReset}
+        onCompleteReset={completePasswordReset}
         message={authMessage}
       />
     )
