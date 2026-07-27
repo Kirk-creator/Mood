@@ -11,10 +11,14 @@ import {
   createCheckIn,
   deleteCheckIn,
   loadCheckIns,
+  loadLegacyGuestSettings,
   loadSettings,
+  reconcileCategoriesAndCheckIns,
+  saveCheckIns,
   saveSettings,
   setStorageUserId,
   updateCheckIn,
+  checkInsEqual,
 } from '../storage'
 import type { AppSettings, CheckIn } from '../types'
 
@@ -40,17 +44,24 @@ export function useCheckIns(userId: string | null) {
   useEffect(() => {
     let cancelled = false
 
-    function loadLocalSettings() {
-      const loaded = loadSettings()
-      saveSettings(loaded)
-      return loaded
+    function loadLocalAccount() {
+      const guestSettings = loadLegacyGuestSettings()
+      const reconciled = reconcileCategoriesAndCheckIns(
+        loadSettings(),
+        loadCheckIns(),
+        [guestSettings],
+      )
+      saveSettings(reconciled.settings)
+      saveCheckIns(reconciled.checkIns)
+      return reconciled
     }
 
     async function load() {
       if (!isSupabaseConfigured()) {
         setStorageUserId(null)
-        setCheckIns(loadCheckIns())
-        setSettings(loadLocalSettings())
+        const local = loadLocalAccount()
+        setCheckIns(local.checkIns)
+        setSettings(local.settings)
         setCloudSync('local-only')
         setReady(true)
         return
@@ -59,7 +70,8 @@ export function useCheckIns(userId: string | null) {
       if (!userId) {
         clearAccountCache()
         setCheckIns([])
-        setSettings(loadLocalSettings())
+        const local = loadLocalAccount()
+        setSettings(local.settings)
         setCloudSync('idle')
         setReady(false)
         return
@@ -81,10 +93,9 @@ export function useCheckIns(userId: string | null) {
         const message = err instanceof Error ? err.message : String(err)
         console.warn('Account hydrate failed', err)
         setStorageUserId(userId)
-        setCheckIns(loadCheckIns())
-        const loaded = loadSettings()
-        saveSettings(loaded)
-        setSettings(loaded)
+        const local = loadLocalAccount()
+        setCheckIns(local.checkIns)
+        setSettings(local.settings)
         setCloudSync('error')
         setCloudError(message)
         setReady(true)
@@ -124,11 +135,29 @@ export function useCheckIns(userId: string | null) {
     void pushDeleteCheckIn(id)
   }, [])
 
-  const updateSettings = useCallback((next: AppSettings) => {
-    saveSettings(next)
-    setSettings(next)
-    void pushSettings(next)
-  }, [])
+  const updateSettings = useCallback(
+    (next: AppSettings) => {
+      const before = loadCheckIns()
+      const reconciled = reconcileCategoriesAndCheckIns(next, before, [settings])
+      saveSettings(reconciled.settings)
+      saveCheckIns(reconciled.checkIns)
+      setSettings(reconciled.settings)
+      setCheckIns(reconciled.checkIns)
+      void pushSettings(reconciled.settings)
+      if (!checkInsEqual(before, reconciled.checkIns)) {
+        for (const checkIn of reconciled.checkIns) {
+          const prev = before.find((c) => c.id === checkIn.id)
+          if (
+            !prev ||
+            JSON.stringify(prev.entries) !== JSON.stringify(checkIn.entries)
+          ) {
+            void pushCheckIn(checkIn)
+          }
+        }
+      }
+    },
+    [settings],
+  )
 
   return {
     checkIns,
