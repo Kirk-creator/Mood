@@ -1,5 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import type { FlatActivity } from '../chartUtils'
+import '../activityChipGroups.css'
 
 export interface ActivityGroup {
   categoryId: string
