@@ -1,13 +1,17 @@
+import { defaultSettings } from '../constants'
 import type { AppSettings, CheckIn } from '../types'
 import {
   loadCheckIns,
+  loadLegacyGuestCheckIns,
+  loadLegacyGuestSettings,
   loadSettings,
   normalizeCheckIn,
   normalizeSettings,
   saveCheckIns,
   saveSettings,
+  setStorageUserId,
 } from '../storage'
-import { ensureUserId, getSupabase } from './supabase'
+import { getSupabase, requireUserId } from './supabase'
 
 export class CloudSyncError extends Error {
   constructor(message: string) {
@@ -23,33 +27,41 @@ function sortCheckIns(checkIns: CheckIn[]): CheckIn[] {
   )
 }
 
-function mergeCheckIns(local: CheckIn[], remote: CheckIn[]): CheckIn[] {
-  const byId = new Map<string, CheckIn>()
-  for (const item of local) byId.set(item.id, item)
-  for (const item of remote) {
-    const existing = byId.get(item.id)
-    if (!existing) {
-      byId.set(item.id, item)
-      continue
-    }
-    const existingTs = new Date(existing.timestamp).getTime()
-    const remoteTs = new Date(item.timestamp).getTime()
-    byId.set(item.id, remoteTs >= existingTs ? item : existing)
+function explainReadError(detail: string): string {
+  if (
+    /schema cache|PGRST002|pg_pgrst_no_exposed_schemas|Could not query the database/i.test(
+      detail,
+    )
+  ) {
+    return `Supabase Data API/PostgREST is disabled or broken (${detail}). Enable Project Settings → Data API with the public schema exposed.`
   }
-  return sortCheckIns([...byId.values()])
+  return `Could not read check_ins (${detail}). Run supabase/migrations/001_pulse.sql in the SQL editor.`
+}
+
+/** Bind local cache to this account, then load their cloud data. */
+export async function hydrateAccount(userId: string): Promise<{
+  checkIns: CheckIn[]
+  settings: AppSettings
+}> {
+  setStorageUserId(userId)
+  const checkIns = await hydrateCheckIns()
+  const settings = await hydrateSettings()
+  return { checkIns, settings }
+}
+
+export function clearAccountCache(): void {
+  setStorageUserId(null)
 }
 
 export async function hydrateCheckIns(): Promise<CheckIn[]> {
-  const local = loadCheckIns()
   const supabase = getSupabase()
-  if (!supabase) return local
+  if (!supabase) return loadCheckIns()
 
-  const userId = await ensureUserId()
+  const userId = await requireUserId()
   if (!userId) {
-    throw new CloudSyncError(
-      'Anonymous sign-in failed. Enable Anonymous provider in Supabase Auth.',
-    )
+    throw new CloudSyncError('Sign in to load your check-ins from Supabase.')
   }
+  setStorageUserId(userId)
 
   const { data, error } = await supabase
     .from('check_ins')
@@ -57,9 +69,7 @@ export async function hydrateCheckIns(): Promise<CheckIn[]> {
     .eq('user_id', userId)
 
   if (error) {
-    throw new CloudSyncError(
-      `Could not read check_ins (${error.message}). Run supabase/migrations/001_pulse.sql.`,
-    )
+    throw new CloudSyncError(explainReadError(error.message || 'unknown error'))
   }
 
   const remote = (data ?? [])
@@ -73,40 +83,50 @@ export async function hydrateCheckIns(): Promise<CheckIn[]> {
     )
     .filter((c): c is CheckIn => c !== null)
 
-  const merged = mergeCheckIns(local, remote)
-  saveCheckIns(merged)
-
-  const remoteIds = new Set(remote.map((c) => c.id))
-  const missing = merged.filter((c) => !remoteIds.has(c.id))
-  if (missing.length > 0) {
-    const payload = missing.map((c) => ({
-      id: c.id,
-      user_id: userId,
-      timestamp: c.timestamp,
-      notes: c.notes,
-      entries: c.entries,
-      updated_at: new Date().toISOString(),
-    }))
-    const { error: upsertError } = await supabase
-      .from('check_ins')
-      .upsert(payload, { onConflict: 'id' })
-    if (upsertError) {
-      throw new CloudSyncError(
-        `Could not upload local check-ins (${upsertError.message}).`,
-      )
-    }
+  // Returning users: remote is the source of truth.
+  if (remote.length > 0) {
+    const sorted = sortCheckIns(remote)
+    saveCheckIns(sorted)
+    return sorted
   }
 
-  return merged
+  // New account with empty cloud: import prior guest local data once, if any.
+  const guest = loadLegacyGuestCheckIns()
+  const local = loadCheckIns()
+  const seed = local.length > 0 ? local : guest
+  if (seed.length === 0) {
+    saveCheckIns([])
+    return []
+  }
+
+  const payload = seed.map((c) => ({
+    id: c.id,
+    user_id: userId,
+    timestamp: c.timestamp,
+    notes: c.notes,
+    entries: c.entries,
+    updated_at: new Date().toISOString(),
+  }))
+  const { error: upsertError } = await supabase
+    .from('check_ins')
+    .upsert(payload, { onConflict: 'id' })
+  if (upsertError) {
+    throw new CloudSyncError(
+      `Could not upload check-ins (${upsertError.message}).`,
+    )
+  }
+  const sorted = sortCheckIns(seed)
+  saveCheckIns(sorted)
+  return sorted
 }
 
 export async function hydrateSettings(): Promise<AppSettings> {
-  const local = loadSettings()
   const supabase = getSupabase()
-  if (!supabase) return local
+  if (!supabase) return loadSettings()
 
-  const userId = await ensureUserId()
-  if (!userId) return local
+  const userId = await requireUserId()
+  if (!userId) return defaultSettings()
+  setStorageUserId(userId)
 
   const { data, error } = await supabase
     .from('app_settings')
@@ -116,7 +136,7 @@ export async function hydrateSettings(): Promise<AppSettings> {
 
   if (error) {
     console.warn('Failed to load settings from Supabase', error.message)
-    return local
+    return loadSettings()
   }
 
   if (data?.categories != null) {
@@ -125,21 +145,29 @@ export async function hydrateSettings(): Promise<AppSettings> {
     return remote
   }
 
+  const local = loadSettings()
+  const guest = loadLegacyGuestSettings()
+  const seed =
+    local.categories.length > 0
+      ? local
+      : (guest ?? defaultSettings())
+
   const { error: insertError } = await supabase.from('app_settings').upsert({
     user_id: userId,
-    categories: local.categories,
+    categories: seed.categories,
     updated_at: new Date().toISOString(),
   })
   if (insertError) {
-    console.warn('Failed to upload local settings', insertError.message)
+    console.warn('Failed to upload settings', insertError.message)
   }
-  return local
+  saveSettings(seed)
+  return seed
 }
 
 export async function pushCheckIn(checkIn: CheckIn): Promise<void> {
   const supabase = getSupabase()
   if (!supabase) return
-  const userId = await ensureUserId()
+  const userId = await requireUserId()
   if (!userId) return
 
   const { error } = await supabase.from('check_ins').upsert(
@@ -159,7 +187,7 @@ export async function pushCheckIn(checkIn: CheckIn): Promise<void> {
 export async function pushDeleteCheckIn(id: string): Promise<void> {
   const supabase = getSupabase()
   if (!supabase) return
-  const userId = await ensureUserId()
+  const userId = await requireUserId()
   if (!userId) return
 
   const { error } = await supabase
@@ -173,7 +201,7 @@ export async function pushDeleteCheckIn(id: string): Promise<void> {
 export async function pushSettings(settings: AppSettings): Promise<void> {
   const supabase = getSupabase()
   if (!supabase) return
-  const userId = await ensureUserId()
+  const userId = await requireUserId()
   if (!userId) return
 
   const { error } = await supabase.from('app_settings').upsert({

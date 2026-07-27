@@ -1,12 +1,14 @@
 import { useCallback, useState } from 'react'
 import { v4 as uuidv4 } from 'uuid'
 import { nextActivityColor } from './chartUtils'
+import { AuthScreen } from './components/AuthScreen'
 import { CheckInForm } from './components/CheckInForm'
 import { Dashboard } from './components/Dashboard'
 import { HistoryList } from './components/HistoryList'
 import { SettingsPanel } from './components/SettingsPanel'
-import { useCheckIns, useSettings } from './hooks/useCheckIns'
-import { isSupabaseConfigured } from './lib/env'
+import { useAuth } from './hooks/useAuth'
+import { useCheckIns } from './hooks/useCheckIns'
+import { clearAccountCache } from './lib/cloudSync'
 import './App.css'
 
 type View = 'checkin' | 'trends' | 'history' | 'settings'
@@ -19,9 +21,28 @@ const NAV_ITEMS = [
 ]
 
 export default function App() {
-  const { checkIns, ready, add, update, remove, cloudSync, cloudError } =
-    useCheckIns()
-  const { settings, updateSettings } = useSettings()
+  const {
+    configured,
+    status,
+    user,
+    authMessage,
+    signIn,
+    signUp,
+    logOut,
+  } = useAuth()
+  const userId = user?.id ?? null
+  const {
+    checkIns,
+    settings,
+    ready,
+    add,
+    update,
+    remove,
+    updateSettings,
+    cloudSync,
+    cloudError,
+    retrySync,
+  } = useCheckIns(configured ? userId : null)
   const [view, setView] = useState<View>('checkin')
 
   const addActivity = useCallback(
@@ -49,7 +70,6 @@ export default function App() {
       const target = nextCategories.find((c) => c.id === categoryId)
       const created = target?.activities.find((a) => a.id === id)
       if (!created) {
-        // Duplicate label — return existing id if present
         const existing = settings.categories
           .find((c) => c.id === categoryId)
           ?.activities.find(
@@ -62,6 +82,12 @@ export default function App() {
     },
     [settings.categories, updateSettings],
   )
+
+  async function handleLogOut() {
+    clearAccountCache()
+    await logOut()
+    setView('checkin')
+  }
 
   function renderNav(className: string, ariaLabel: string) {
     return (
@@ -81,6 +107,25 @@ export default function App() {
     )
   }
 
+  if (configured && status === 'loading') {
+    return (
+      <div className="app">
+        <div className="ambient" aria-hidden />
+        <p className="auth-loading">Checking your session…</p>
+      </div>
+    )
+  }
+
+  if (configured && status === 'signed-out') {
+    return (
+      <AuthScreen
+        onSignIn={signIn}
+        onSignUp={signUp}
+        message={authMessage}
+      />
+    )
+  }
+
   return (
     <div className="app">
       <div className="ambient" aria-hidden />
@@ -93,12 +138,49 @@ export default function App() {
           </div>
         </div>
         {renderNav('nav desktop-nav', 'Primary')}
-        <p className="header-meta">
-          {ready ? `${checkIns.length} saved` : 'Loading…'}
-        </p>
+        <div className="header-meta-block">
+          <p className="header-meta">
+            {ready ? `${checkIns.length} saved` : 'Loading…'}
+          </p>
+          {user?.email && (
+            <p className="header-user" title={user.email}>
+              {user.email}
+            </p>
+          )}
+          {configured && (
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm header-logout"
+              onClick={() => void handleLogOut()}
+            >
+              Log out
+            </button>
+          )}
+        </div>
       </header>
 
       <main className="main">
+        {cloudSync === 'error' && (
+          <div className="sync-banner" role="alert">
+            <div>
+              <p className="sync-banner-title">Cloud sync is not working</p>
+              <p className="sync-banner-body">
+                {cloudError ??
+                  'Could not reach Supabase. Showing cached data for this account when available.'}
+              </p>
+            </div>
+            <button type="button" className="sync-banner-retry" onClick={retrySync}>
+              Retry sync
+            </button>
+          </div>
+        )}
+        {cloudSync === 'syncing' && (
+          <div className="sync-banner is-info" role="status">
+            <p className="sync-banner-body">
+              Loading your check-ins from Supabase…
+            </p>
+          </div>
+        )}
         {view === 'checkin' && (
           <CheckInForm
             categories={settings.categories}
@@ -127,20 +209,13 @@ export default function App() {
         <p>
           {cloudSync === 'local-only' &&
             'Data stays in your browser via localStorage — nothing is uploaded.'}
-          {cloudSync === 'syncing' &&
-            'Connecting to Supabase and uploading local check-ins…'}
+          {cloudSync === 'idle' && 'Sign in to sync with Supabase.'}
+          {cloudSync === 'syncing' && 'Loading your account data…'}
           {cloudSync === 'synced' &&
-            'Synced to Supabase; also cached in your browser.'}
+            'Signed in — your check-ins are loaded from Supabase and cached locally.'}
           {cloudSync === 'error' &&
-            `Cloud sync failed${cloudError ? `: ${cloudError}` : ''}. Still using local data.`}
+            'Cloud sync failed — showing local cache for this account when available.'}
         </p>
-        {isSupabaseConfigured() ? null : (
-          <p className="site-footer-hint">
-            Supabase keys were not baked into this build. After Doppler syncs
-            SUPABASE_URL + SUPABASE_ANON to GitHub Actions, re-run the deploy
-            workflow.
-          </p>
-        )}
       </footer>
 
       {renderNav('nav mobile-nav', 'Mobile')}

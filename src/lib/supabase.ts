@@ -1,4 +1,9 @@
-import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import {
+  createClient,
+  type Session,
+  type SupabaseClient,
+  type User,
+} from '@supabase/supabase-js'
 import { getSupabaseConfig } from './env'
 
 export type PulseDatabase = {
@@ -57,6 +62,12 @@ export type PulseDatabase = {
   }
 }
 
+export type AuthResult = {
+  user: User | null
+  session: Session | null
+  error: { message: string } | null
+}
+
 let client: SupabaseClient<PulseDatabase> | null | undefined
 
 export function getSupabase(): SupabaseClient<PulseDatabase> | null {
@@ -70,30 +81,81 @@ export function getSupabase(): SupabaseClient<PulseDatabase> | null {
     auth: {
       persistSession: true,
       autoRefreshToken: true,
-      detectSessionInUrl: false,
+      detectSessionInUrl: true,
+      flowType: 'pkce',
     },
   })
   return client
 }
 
-/** Ensure an anonymous session exists; returns user id or null. */
-export async function ensureUserId(): Promise<string | null> {
+export async function getSession(): Promise<Session | null> {
   const supabase = getSupabase()
   if (!supabase) return null
-
-  const { data: existing, error: sessionError } = await supabase.auth.getSession()
-  if (sessionError) {
-    console.warn('Supabase session read failed', sessionError.message)
-  }
-  if (existing.session?.user?.id) return existing.session.user.id
-
-  const { data, error } = await supabase.auth.signInAnonymously()
+  const { data, error } = await supabase.auth.getSession()
   if (error) {
-    console.warn(
-      'Supabase anonymous sign-in failed. Enable Anonymous sign-ins in the Supabase dashboard.',
-      error.message,
-    )
+    console.warn('Supabase session read failed', error.message)
     return null
   }
-  return data.user?.id ?? null
+  return data.session
+}
+
+/** Returns the signed-in user id, or null if logged out. */
+export async function requireUserId(): Promise<string | null> {
+  const session = await getSession()
+  return session?.user?.id ?? null
+}
+
+export async function signUpWithEmail(
+  email: string,
+  password: string,
+): Promise<AuthResult> {
+  const supabase = getSupabase()
+  if (!supabase) {
+    return {
+      user: null,
+      session: null,
+      error: { message: 'Supabase is not configured for this build.' },
+    }
+  }
+
+  const { data, error } = await supabase.auth.signUp({
+    email: email.trim(),
+    password,
+  })
+  return {
+    user: data.user,
+    session: data.session,
+    error: error ? { message: error.message } : null,
+  }
+}
+
+export async function signInWithEmail(
+  email: string,
+  password: string,
+): Promise<AuthResult> {
+  const supabase = getSupabase()
+  if (!supabase) {
+    return {
+      user: null,
+      session: null,
+      error: { message: 'Supabase is not configured for this build.' },
+    }
+  }
+
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email: email.trim(),
+    password,
+  })
+  return {
+    user: data.user,
+    session: data.session,
+    error: error ? { message: error.message } : null,
+  }
+}
+
+export async function signOut(): Promise<{ message: string } | null> {
+  const supabase = getSupabase()
+  if (!supabase) return null
+  const { error } = await supabase.auth.signOut()
+  return error ? { message: error.message } : null
 }

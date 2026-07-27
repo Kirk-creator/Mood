@@ -2,10 +2,11 @@
 
 Client-side mood, activity, and health correlation tracker. Log flexible multi-times-daily check-ins for mood, exercise, physical well-being, and energy — then explore trends on an interactive timeline.
 
-Data is always cached in `localStorage`. When Supabase credentials are provided (via Doppler or `.env`), check-ins and settings also sync to Supabase using anonymous auth + RLS.
+Data is cached in `localStorage` per account. With Supabase configured, users sign up / log in with email and password; their check-ins and settings load from Supabase (RLS by `auth.uid()`).
 
 ## Features
 
+- **Email sign up & log in** — each account loads its own Supabase check-ins and settings
 - **Multiple daily check-ins** — log as often as you like
 - **Configurable categories** — add, remove, reorder, and recolor; each can optionally use a 1–10 bubble scale
 - **Custom activities** per category — add them on the check-in card or in Settings
@@ -14,8 +15,8 @@ Data is always cached in `localStorage`. When Supabase credentials are provided 
 - **Confetti** — celebrates every saved check-in
 - **Whole-check-in notes** — one notes field per entry
 - **Full CRUD** — edit or delete past check-ins
-- **LocalStorage cache** — works offline; older data migrates automatically
-- **Optional Supabase sync** — when `SUPABASE_URL` + `SUPABASE_ANON` (or `VITE_*` variants) are set
+- **Per-account local cache** — works offline after the first sync
+- **Supabase sync** — when `SUPABASE_URL` + `SUPABASE_ANON_KEY` are set
 
 ## Live site
 
@@ -40,12 +41,13 @@ The deploy workflow uses `environment: github-pages` and reads those from enviro
 
 ### One-time Supabase setup
 
-1. Run `supabase/migrations/001_pulse.sql` in the Supabase SQL editor.
-2. Enable **Authentication → Providers → Anonymous** sign-ins.
-3. Keep `SUPABASE_URL` + `SUPABASE_ANON_KEY` in Doppler (already synced to `github-pages`).
-4. After deploy succeeds, open the live site once — it uploads existing `localStorage` check-ins into Supabase.
+1. **Enable the Data API** — Project Settings → Data API, keep `public` exposed.
+2. Run `supabase/migrations/001_pulse.sql` in the SQL editor.
+3. Enable **Authentication → Providers → Email** (disable email confirmations while testing if you want instant login after sign-up).
+4. Under **Authentication → URL configuration**, set Site URL to your Pages URL (`https://kirk-creator.github.io/Mood/docs/`) and add it to Redirect URLs.
+5. Keep `SUPABASE_URL` + `SUPABASE_ANON_KEY` in Doppler (synced to `github-pages`).
 
-Trends/History still render from the local cache; Supabase is the cloud copy in the Table Editor.
+After deploy, open the live site → **Sign up** or **Log in**. That account’s rows in `check_ins` / `app_settings` are what Trends and History show.
 
 ### Develop with Doppler CLI (optional)
 

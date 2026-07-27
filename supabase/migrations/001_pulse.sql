@@ -1,6 +1,8 @@
 -- Pulse cloud sync schema
 -- Apply in the Supabase SQL editor (or via supabase db push).
--- Also enable Authentication → Providers → Anonymous sign-ins.
+-- Prerequisites:
+--   1. Enable Project Settings → Data API (expose public schema)
+--   2. Enable Authentication → Providers → Email
 
 create table if not exists public.check_ins (
   id uuid primary key,
