@@ -695,6 +695,11 @@
   min-height: 360px;
 }
 
+.chart-empty-series {
+  margin: 0 0.75rem 0.65rem;
+  padding: 0 0.25rem;
+}
+
 .chart-meta {
   margin-top: 0.75rem;
   color: var(--ink-muted);

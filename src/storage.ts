@@ -176,7 +176,9 @@ function normalizeCategory(raw: unknown): CategoryConfig | null {
     description: typeof raw.description === 'string' ? raw.description : '',
     lowLabel: typeof raw.lowLabel === 'string' ? raw.lowLabel : 'Low',
     highLabel: typeof raw.highLabel === 'string' ? raw.highLabel : 'High',
-    hasScale: typeof raw.hasScale === 'boolean' ? raw.hasScale : true,
+    // Missing field → off. Starters set true explicitly in DEFAULT_CATEGORIES /
+    // applyPreferredStarterCategories so Trends does not pick up stock leftovers.
+    hasScale: typeof raw.hasScale === 'boolean' ? raw.hasScale : false,
     activities,
   }
 }
@@ -196,7 +198,9 @@ export function loadSettings(): AppSettings {
   try {
     const raw = localStorage.getItem(scopedKey(SETTINGS_KEY))
     if (!raw) return defaultSettings()
-    return normalizeSettings(JSON.parse(raw) as unknown)
+    return applyPreferredStarterCategories(
+      normalizeSettings(JSON.parse(raw) as unknown),
+    )
   } catch {
     return defaultSettings()
   }
@@ -302,7 +306,7 @@ export function settingsEqual(a: AppSettings, b: AppSettings): boolean {
 /**
  * Slim old stock category packs down to Mood / Energy / Health / Anxiety,
  * keeping activities on those starters and preserving any other stock
- * categories that still have activities.
+ * categories that still have activities (activity-only — scale off).
  */
 export function applyPreferredStarterCategories(
   settings: AppSettings,
@@ -311,19 +315,9 @@ export function applyPreferredStarterCategories(
   if (!settings.categories.every((c) => stock.has(c.id))) return settings
 
   const preferred = DEFAULT_CATEGORIES.map((c) => c.id)
-  const alreadyPreferred =
-    settings.categories.length === preferred.length &&
-    preferred.every((id) => settings.categories.some((c) => c.id === id))
-  if (alreadyPreferred) {
-    // Ensure scales stay on for starters.
-    return {
-      categories: settings.categories.map((c) =>
-        preferred.includes(c.id) ? { ...c, hasScale: true } : c,
-      ),
-    }
-  }
-
+  const preferredSet = new Set(preferred)
   const byId = new Map(settings.categories.map((c) => [c.id, c]))
+
   const starters = DEFAULT_CATEGORIES.map((def) => {
     const existing = byId.get(def.id)
     if (!existing) return { ...def, activities: [] }
@@ -338,9 +332,13 @@ export function applyPreferredStarterCategories(
       activities: existing.activities.map((a) => ({ ...a })),
     }
   })
-  const extras = settings.categories.filter(
-    (c) => !preferred.includes(c.id) && c.activities.length > 0,
-  )
+
+  const extras = settings.categories
+    .filter((c) => !preferredSet.has(c.id) && c.activities.length > 0)
+    .map((c) => ({
+      ...c,
+      hasScale: false,
+    }))
 
   return { categories: [...starters, ...extras] }
 }
