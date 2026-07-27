@@ -1,3 +1,4 @@
+import { v4 as uuidv4 } from 'uuid'
 import { defaultSettings } from '../constants'
 import type { AppSettings, CheckIn } from '../types'
 import {
@@ -90,16 +91,23 @@ export async function hydrateCheckIns(): Promise<CheckIn[]> {
     return sorted
   }
 
-  // New account with empty cloud: import prior guest local data once, if any.
+  // New account with empty cloud: import prior guest/local data once, if any.
+  // Remint IDs so we never upsert over rows owned by a previous anonymous user
+  // (that triggers RLS USING failures on the UPDATE path of upsert).
   const guest = loadLegacyGuestCheckIns()
   const local = loadCheckIns()
-  const seed = local.length > 0 ? local : guest
-  if (seed.length === 0) {
+  const seedSource = local.length > 0 ? local : guest
+  if (seedSource.length === 0) {
     saveCheckIns([])
     return []
   }
 
-  const payload = seed.map((c) => ({
+  const seeded: CheckIn[] = seedSource.map((c) => ({
+    ...c,
+    id: uuidv4(),
+  }))
+
+  const payload = seeded.map((c) => ({
     id: c.id,
     user_id: userId,
     timestamp: c.timestamp,
@@ -107,15 +115,13 @@ export async function hydrateCheckIns(): Promise<CheckIn[]> {
     entries: c.entries,
     updated_at: new Date().toISOString(),
   }))
-  const { error: upsertError } = await supabase
-    .from('check_ins')
-    .upsert(payload, { onConflict: 'id' })
-  if (upsertError) {
+  const { error: insertError } = await supabase.from('check_ins').insert(payload)
+  if (insertError) {
     throw new CloudSyncError(
-      `Could not upload check-ins (${upsertError.message}).`,
+      `Could not upload check-ins (${insertError.message}).`,
     )
   }
-  const sorted = sortCheckIns(seed)
+  const sorted = sortCheckIns(seeded)
   saveCheckIns(sorted)
   return sorted
 }
@@ -164,24 +170,64 @@ export async function hydrateSettings(): Promise<AppSettings> {
   return seed
 }
 
-export async function pushCheckIn(checkIn: CheckIn): Promise<void> {
+export async function pushCheckIn(checkIn: CheckIn): Promise<CheckIn | null> {
   const supabase = getSupabase()
-  if (!supabase) return
+  if (!supabase) return checkIn
   const userId = await requireUserId()
-  if (!userId) return
+  if (!userId) return checkIn
 
-  const { error } = await supabase.from('check_ins').upsert(
-    {
-      id: checkIn.id,
-      user_id: userId,
-      timestamp: checkIn.timestamp,
-      notes: checkIn.notes,
-      entries: checkIn.entries,
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: 'id' },
-  )
-  if (error) console.warn('Failed to sync check-in', error.message)
+  const row = {
+    id: checkIn.id,
+    user_id: userId,
+    timestamp: checkIn.timestamp,
+    notes: checkIn.notes,
+    entries: checkIn.entries,
+    updated_at: new Date().toISOString(),
+  }
+
+  // Prefer update of our own row; if missing, insert. Avoids upsert UPDATE
+  // against another user's colliding primary key (RLS USING failure).
+  const { data: updated, error: updateError } = await supabase
+    .from('check_ins')
+    .update({
+      timestamp: row.timestamp,
+      notes: row.notes,
+      entries: row.entries,
+      updated_at: row.updated_at,
+    })
+    .eq('id', checkIn.id)
+    .eq('user_id', userId)
+    .select('id')
+
+  if (updateError) {
+    console.warn('Failed to sync check-in', updateError.message)
+    return null
+  }
+  if (updated && updated.length > 0) return checkIn
+
+  const { error: insertError } = await supabase.from('check_ins').insert(row)
+  if (!insertError) return checkIn
+
+  // ID may already belong to another account — remint and insert.
+  if (/row-level security|duplicate key/i.test(insertError.message)) {
+    const reminted: CheckIn = { ...checkIn, id: uuidv4() }
+    const { error: retryError } = await supabase.from('check_ins').insert({
+      ...row,
+      id: reminted.id,
+    })
+    if (retryError) {
+      console.warn('Failed to sync check-in', retryError.message)
+      return null
+    }
+    const next = loadCheckIns().map((item) =>
+      item.id === checkIn.id ? reminted : item,
+    )
+    saveCheckIns(next)
+    return reminted
+  }
+
+  console.warn('Failed to sync check-in', insertError.message)
+  return null
 }
 
 export async function pushDeleteCheckIn(id: string): Promise<void> {

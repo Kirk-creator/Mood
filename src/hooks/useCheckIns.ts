@@ -91,12 +91,20 @@ export function useCheckIns(userId: string | null) {
 
   const add = useCallback((checkIn: CheckIn) => {
     setCheckIns(createCheckIn(checkIn))
-    void pushCheckIn(checkIn)
+    void pushCheckIn(checkIn).then((synced) => {
+      if (synced && synced.id !== checkIn.id) {
+        setCheckIns(loadCheckIns())
+      }
+    })
   }, [])
 
   const update = useCallback((checkIn: CheckIn) => {
     setCheckIns(updateCheckIn(checkIn))
-    void pushCheckIn(checkIn)
+    void pushCheckIn(checkIn).then((synced) => {
+      if (synced && synced.id !== checkIn.id) {
+        setCheckIns(loadCheckIns())
+      }
+    })
   }, [])
 
   const remove = useCallback((id: string) => {
