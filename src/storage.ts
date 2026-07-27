@@ -364,6 +364,15 @@ function mergeActivityLists(
 }
 
 /**
+ * Pre-starter custom category ids we have already identified in the wild.
+ * These always remap onto the stock starter, even if Anxiety already has
+ * newer ratings under `anxiety`.
+ */
+const KNOWN_LEGACY_CATEGORY_ALIASES: Record<string, string> = {
+  '0fdc117f-cebf-4638-bf1b-1045813d7eec': 'anxiety',
+}
+
+/**
  * Map old category ids → current ids when labels match a starter (e.g. a
  * custom UUID "Anxiety" category → stock `anxiety`).
  */
@@ -371,7 +380,10 @@ export function collectCategoryIdAliases(
   target: AppSettings,
   sources: Array<AppSettings | null | undefined>,
 ): Record<string, string> {
-  const aliases: Record<string, string> = { ...loadPersistedAliases() }
+  const aliases: Record<string, string> = {
+    ...KNOWN_LEGACY_CATEGORY_ALIASES,
+    ...loadPersistedAliases(),
+  }
   const targetById = new Map(target.categories.map((c) => [c.id, c]))
   const targetByLabel = new Map(
     target.categories.map((c) => [c.label.trim().toLowerCase(), c.id]),
@@ -407,41 +419,60 @@ export function collectCategoryIdAliases(
 }
 
 /**
- * Last resort: a single orphan UUID with ratings, while stock Anxiety has none,
- * is almost always a pre-starter custom Anxiety category.
+ * Ensure Mood / Energy / Health / Anxiety always exist so remapped ratings
+ * have a real category to land on (and show in History / Trends).
+ */
+export function ensureStarterCategories(settings: AppSettings): AppSettings {
+  const preferredIds = new Set(DEFAULT_CATEGORIES.map((c) => c.id))
+  const byId = new Map(settings.categories.map((c) => [c.id, c]))
+  const starters = DEFAULT_CATEGORIES.map((def) => {
+    const existing = byId.get(def.id)
+    if (!existing) return { ...def, activities: [] }
+    return {
+      ...existing,
+      hasScale: existing.hasScale || def.hasScale,
+    }
+  })
+  const extras = settings.categories.filter((c) => !preferredIds.has(c.id))
+  return { categories: [...starters, ...extras] }
+}
+
+/**
+ * Remap orphaned entry keys onto stock starters. Known legacy Anxiety UUIDs
+ * always map to `anxiety`. A single remaining orphan UUID with ratings also
+ * maps to `anxiety` when that starter exists (even if newer Anxiety logs exist).
  */
 export function inferOrphanStarterAliases(
   checkIns: CheckIn[],
   settings: AppSettings,
 ): Record<string, string> {
+  const aliases: Record<string, string> = {}
   const known = new Set(settings.categories.map((c) => c.id))
+  const hasAnxiety = known.has('anxiety')
+
+  for (const [from, to] of Object.entries(KNOWN_LEGACY_CATEGORY_ALIASES)) {
+    if (!known.has(to)) continue
+    if (checkIns.some((c) => Object.prototype.hasOwnProperty.call(c.entries, from))) {
+      aliases[from] = to
+    }
+  }
+
+  if (!hasAnxiety) return aliases
+
   const orphanIds = new Set<string>()
   for (const checkIn of checkIns) {
     for (const [id, entry] of Object.entries(checkIn.entries)) {
-      if (known.has(id)) continue
+      if (known.has(id) || aliases[id]) continue
       if (entry.value !== null || entry.activityIds.length > 0) orphanIds.add(id)
     }
   }
 
   const uuidOrphans = [...orphanIds].filter((id) => UUID_RE.test(id))
-  if (uuidOrphans.length !== 1) return {}
-  if (!settings.categories.some((c) => c.id === 'anxiety')) return {}
-
-  const orphanId = uuidOrphans[0]
-  let orphanUsed = false
-  let anxietyUsed = false
-  for (const checkIn of checkIns) {
-    const orphan = checkIn.entries[orphanId]
-    if (orphan && (orphan.value !== null || orphan.activityIds.length > 0)) {
-      orphanUsed = true
-    }
-    const anxiety = checkIn.entries.anxiety
-    if (anxiety && (anxiety.value !== null || anxiety.activityIds.length > 0)) {
-      anxietyUsed = true
-    }
+  if (uuidOrphans.length === 1) {
+    aliases[uuidOrphans[0]] = 'anxiety'
   }
-  if (orphanUsed && !anxietyUsed) return { [orphanId]: 'anxiety' }
-  return {}
+
+  return aliases
 }
 
 export function remapCheckInCategoryIds(
@@ -579,9 +610,12 @@ export function reconcileCategoriesAndCheckIns(
   historical: Array<AppSettings | null | undefined> = [],
 ): { settings: AppSettings; checkIns: CheckIn[] } {
   const folded = foldDuplicateStarterCategories(settings)
-  let nextSettings = applyPreferredStarterCategories(folded.settings)
+  let nextSettings = ensureStarterCategories(
+    applyPreferredStarterCategories(folded.settings),
+  )
 
   const aliases = {
+    ...KNOWN_LEGACY_CATEGORY_ALIASES,
     ...folded.aliases,
     ...collectCategoryIdAliases(nextSettings, [
       settings,
@@ -591,11 +625,19 @@ export function reconcileCategoriesAndCheckIns(
     ...inferOrphanStarterAliases(checkIns, nextSettings),
   }
 
-  if (Object.keys(aliases).length > 0) {
-    savePersistedAliases(aliases)
+  // Only keep aliases whose destination category exists (or is a starter we
+  // just ensured). Drop mappings that would orphan ratings again.
+  const knownIds = new Set(nextSettings.categories.map((c) => c.id))
+  const usableAliases: Record<string, string> = {}
+  for (const [from, to] of Object.entries(aliases)) {
+    if (from && to && from !== to && knownIds.has(to)) usableAliases[from] = to
   }
 
-  const nextCheckIns = remapCheckInCategoryIds(checkIns, aliases)
+  if (Object.keys(usableAliases).length > 0) {
+    savePersistedAliases(usableAliases)
+  }
+
+  const nextCheckIns = remapCheckInCategoryIds(checkIns, usableAliases)
   nextSettings = recoverActivitiesFromCheckIns(nextSettings, nextCheckIns)
 
   return { settings: nextSettings, checkIns: nextCheckIns }
