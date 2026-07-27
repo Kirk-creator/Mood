@@ -7,10 +7,11 @@ import {
   loadLegacyGuestSettings,
   loadSettings,
   applyPreferredStarterCategories,
+  checkInsEqual,
   mergeSettingsActivities,
   normalizeCheckIn,
   normalizeSettings,
-  recoverActivitiesFromCheckIns,
+  reconcileCategoriesAndCheckIns,
   saveCheckIns,
   saveSettings,
   setStorageUserId,
@@ -49,18 +50,34 @@ export async function hydrateAccount(userId: string): Promise<{
   settings: AppSettings
 }> {
   setStorageUserId(userId)
-  const checkIns = await hydrateCheckIns()
-  let settings = await hydrateSettings()
-  const restored = recoverActivitiesFromCheckIns(
-    applyPreferredStarterCategories(settings),
-    checkIns,
+  const guestSettings = loadLegacyGuestSettings()
+  const localSettingsBefore = loadSettings()
+  const loadedCheckIns = await hydrateCheckIns()
+  const loadedSettings = await hydrateSettings()
+
+  const reconciled = reconcileCategoriesAndCheckIns(
+    loadedSettings,
+    loadedCheckIns,
+    [localSettingsBefore, guestSettings],
   )
-  if (!settingsEqual(settings, restored)) {
-    settings = restored
-    saveSettings(settings)
-    await pushSettings(settings)
+
+  saveSettings(reconciled.settings)
+  saveCheckIns(reconciled.checkIns)
+
+  if (!settingsEqual(loadedSettings, reconciled.settings)) {
+    await pushSettings(reconciled.settings)
   }
-  return { checkIns, settings }
+
+  if (!checkInsEqual(loadedCheckIns, reconciled.checkIns)) {
+    for (const checkIn of reconciled.checkIns) {
+      const before = loadedCheckIns.find((c) => c.id === checkIn.id)
+      if (!before || JSON.stringify(before.entries) !== JSON.stringify(checkIn.entries)) {
+        await pushCheckIn(checkIn)
+      }
+    }
+  }
+
+  return reconciled
 }
 
 export function clearAccountCache(): void {

@@ -101,13 +101,22 @@ export function HistoryList({
                 })}
                 {Object.entries(item.entries)
                   .filter(([id]) => !categoryMap[id])
-                  .map(([id, entry]) => (
-                    <div key={id} className="history-rating">
-                      <span className="chip-dot" aria-hidden />
-                      <span className="history-rating__label">{id}</span>
-                      <strong>{entry.value ?? '—'}</strong>
-                    </div>
-                  ))}
+                  .map(([id, entry]) => {
+                    const hasData =
+                      entry.value !== null || entry.activityIds.length > 0
+                    if (!hasData) return null
+                    const looksLikeId =
+                      /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(id) || id.length > 24
+                    return (
+                      <div key={id} className="history-rating">
+                        <span className="chip-dot" aria-hidden />
+                        <span className="history-rating__label">
+                          {looksLikeId ? 'Former category' : id}
+                        </span>
+                        <strong>{entry.value ?? '—'}</strong>
+                      </div>
+                    )
+                  })}
               </div>
               {item.notes ? (
                 <p className="history-checkin-notes">{item.notes}</p>
