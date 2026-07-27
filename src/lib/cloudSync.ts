@@ -57,8 +57,15 @@ export async function hydrateCheckIns(): Promise<CheckIn[]> {
     .eq('user_id', userId)
 
   if (error) {
+    const detail = error.message || 'unknown error'
+    const paused =
+      /schema cache|PGRST002|upstream connect|connection refused|Could not query the database/i.test(
+        detail,
+      )
     throw new CloudSyncError(
-      `Could not read check_ins (${error.message}). Run supabase/migrations/001_pulse.sql.`,
+      paused
+        ? `Supabase database is unreachable (${detail}). Open the Supabase project dashboard and restore/unpause the database, then refresh.`
+        : `Could not read check_ins (${detail}). Run supabase/migrations/001_pulse.sql in the SQL editor.`,
     )
   }
 

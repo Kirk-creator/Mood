@@ -30,6 +30,7 @@ export function useCheckIns() {
     isSupabaseConfigured() ? 'syncing' : 'local-only',
   )
   const [cloudError, setCloudError] = useState<string | null>(null)
+  const [syncNonce, setSyncNonce] = useState(0)
 
   useEffect(() => {
     let cancelled = false
@@ -42,6 +43,7 @@ export function useCheckIns() {
     }
 
     setCloudSync('syncing')
+    setCloudError(null)
     void hydrateCheckIns()
       .then((next) => {
         if (cancelled) return
@@ -60,6 +62,11 @@ export function useCheckIns() {
     return () => {
       cancelled = true
     }
+  }, [syncNonce])
+
+  const retrySync = useCallback(() => {
+    if (!isSupabaseConfigured()) return
+    setSyncNonce((n) => n + 1)
   }, [])
 
   const add = useCallback((checkIn: CheckIn) => {
@@ -77,7 +84,16 @@ export function useCheckIns() {
     void pushDeleteCheckIn(id)
   }, [])
 
-  return { checkIns, ready, add, update, remove, cloudSync, cloudError }
+  return {
+    checkIns,
+    ready,
+    add,
+    update,
+    remove,
+    cloudSync,
+    cloudError,
+    retrySync,
+  }
 }
 
 export function useSettings() {

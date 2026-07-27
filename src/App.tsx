@@ -19,8 +19,16 @@ const NAV_ITEMS = [
 ]
 
 export default function App() {
-  const { checkIns, ready, add, update, remove, cloudSync, cloudError } =
-    useCheckIns()
+  const {
+    checkIns,
+    ready,
+    add,
+    update,
+    remove,
+    cloudSync,
+    cloudError,
+    retrySync,
+  } = useCheckIns()
   const { settings, updateSettings } = useSettings()
   const [view, setView] = useState<View>('checkin')
 
@@ -99,6 +107,27 @@ export default function App() {
       </header>
 
       <main className="main">
+        {cloudSync === 'error' && (
+          <div className="sync-banner" role="alert">
+            <div>
+              <p className="sync-banner-title">Cloud sync is not working</p>
+              <p className="sync-banner-body">
+                {cloudError ??
+                  'Could not reach Supabase. Your check-ins are still saved in this browser only.'}
+              </p>
+            </div>
+            <button type="button" className="sync-banner-retry" onClick={retrySync}>
+              Retry sync
+            </button>
+          </div>
+        )}
+        {cloudSync === 'syncing' && (
+          <div className="sync-banner is-info" role="status">
+            <p className="sync-banner-body">
+              Connecting to Supabase and uploading local check-ins…
+            </p>
+          </div>
+        )}
         {view === 'checkin' && (
           <CheckInForm
             categories={settings.categories}
@@ -127,18 +156,17 @@ export default function App() {
         <p>
           {cloudSync === 'local-only' &&
             'Data stays in your browser via localStorage — nothing is uploaded.'}
-          {cloudSync === 'syncing' &&
-            'Connecting to Supabase and uploading local check-ins…'}
+          {cloudSync === 'syncing' && 'Uploading to Supabase…'}
           {cloudSync === 'synced' &&
             'Synced to Supabase; also cached in your browser.'}
           {cloudSync === 'error' &&
-            `Cloud sync failed${cloudError ? `: ${cloudError}` : ''}. Still using local data.`}
+            'Cloud sync failed — check-ins remain in this browser until sync succeeds.'}
         </p>
         {isSupabaseConfigured() ? null : (
           <p className="site-footer-hint">
-            Supabase keys were not baked into this build. After Doppler syncs
-            SUPABASE_URL + SUPABASE_ANON to GitHub Actions, re-run the deploy
-            workflow.
+            Supabase keys were not baked into this build. Confirm Doppler syncs
+            SUPABASE_URL + SUPABASE_ANON_KEY into the github-pages environment,
+            then re-run deploy.
           </p>
         )}
       </footer>
