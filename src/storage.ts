@@ -13,6 +13,21 @@ import type {
 } from './types'
 import { emptyEntry } from './types'
 
+/** Active account for scoped localStorage keys. Null = guest/legacy keys. */
+let activeUserId: string | null = null
+
+export function setStorageUserId(userId: string | null): void {
+  activeUserId = userId
+}
+
+export function getStorageUserId(): string | null {
+  return activeUserId
+}
+
+function scopedKey(base: string): string {
+  return activeUserId ? `${base}:${activeUserId}` : base
+}
+
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
 }
@@ -70,7 +85,7 @@ export function normalizeCheckIn(raw: unknown): CheckIn | null {
 
 export function loadCheckIns(): CheckIn[] {
   try {
-    const raw = localStorage.getItem(CHECKINS_KEY)
+    const raw = localStorage.getItem(scopedKey(CHECKINS_KEY))
     if (raw) {
       const parsed: unknown = JSON.parse(raw)
       if (!Array.isArray(parsed)) return []
@@ -82,6 +97,9 @@ export function loadCheckIns(): CheckIn[] {
             new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
         )
     }
+
+    // Only migrate legacy unscoped keys for guest mode.
+    if (activeUserId) return []
 
     const legacy = localStorage.getItem(LEGACY_CHECKINS_KEY)
     if (!legacy) return []
@@ -98,7 +116,7 @@ export function loadCheckIns(): CheckIn[] {
 }
 
 export function saveCheckIns(checkIns: CheckIn[]): void {
-  localStorage.setItem(CHECKINS_KEY, JSON.stringify(checkIns))
+  localStorage.setItem(scopedKey(CHECKINS_KEY), JSON.stringify(checkIns))
 }
 
 export function createCheckIn(checkIn: CheckIn): CheckIn[] {
@@ -173,7 +191,7 @@ export function normalizeSettings(raw: unknown): AppSettings {
 
 export function loadSettings(): AppSettings {
   try {
-    const raw = localStorage.getItem(SETTINGS_KEY)
+    const raw = localStorage.getItem(scopedKey(SETTINGS_KEY))
     if (!raw) return defaultSettings()
     return normalizeSettings(JSON.parse(raw) as unknown)
   } catch {
@@ -182,5 +200,32 @@ export function loadSettings(): AppSettings {
 }
 
 export function saveSettings(settings: AppSettings): void {
-  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings))
+  localStorage.setItem(scopedKey(SETTINGS_KEY), JSON.stringify(settings))
+}
+
+/** Unscoped browser cache left from before accounts existed. */
+export function loadLegacyGuestCheckIns(): CheckIn[] {
+  try {
+    const raw =
+      localStorage.getItem(CHECKINS_KEY) ??
+      localStorage.getItem(LEGACY_CHECKINS_KEY)
+    if (!raw) return []
+    const parsed: unknown = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return []
+    return parsed
+      .map(normalizeCheckIn)
+      .filter((c): c is CheckIn => c !== null)
+  } catch {
+    return []
+  }
+}
+
+export function loadLegacyGuestSettings(): AppSettings | null {
+  try {
+    const raw = localStorage.getItem(SETTINGS_KEY)
+    if (!raw) return null
+    return normalizeSettings(JSON.parse(raw) as unknown)
+  } catch {
+    return null
+  }
 }

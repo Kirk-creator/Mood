@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import {
-  hydrateCheckIns,
-  hydrateSettings,
+  clearAccountCache,
+  hydrateAccount,
   pushCheckIn,
   pushDeleteCheckIn,
   pushSettings,
@@ -13,53 +13,80 @@ import {
   loadCheckIns,
   loadSettings,
   saveSettings,
+  setStorageUserId,
   updateCheckIn,
 } from '../storage'
 import type { AppSettings, CheckIn } from '../types'
 
 export type CloudSyncState =
   | 'local-only'
+  | 'idle'
   | 'syncing'
   | 'synced'
   | 'error'
 
-export function useCheckIns() {
+export function useCheckIns(userId: string | null) {
   const [checkIns, setCheckIns] = useState<CheckIn[]>([])
+  const [settings, setSettings] = useState<AppSettings>(() => loadSettings())
   const [ready, setReady] = useState(false)
-  const [cloudSync, setCloudSync] = useState<CloudSyncState>(() =>
-    isSupabaseConfigured() ? 'syncing' : 'local-only',
-  )
+  const [cloudSync, setCloudSync] = useState<CloudSyncState>('idle')
   const [cloudError, setCloudError] = useState<string | null>(null)
+  const [syncNonce, setSyncNonce] = useState(0)
 
   useEffect(() => {
     let cancelled = false
-    setCheckIns(loadCheckIns())
-    setReady(true)
 
-    if (!isSupabaseConfigured()) {
-      setCloudSync('local-only')
-      return
-    }
+    async function load() {
+      if (!isSupabaseConfigured()) {
+        setStorageUserId(null)
+        setCheckIns(loadCheckIns())
+        setSettings(loadSettings())
+        setCloudSync('local-only')
+        setReady(true)
+        return
+      }
 
-    setCloudSync('syncing')
-    void hydrateCheckIns()
-      .then((next) => {
+      if (!userId) {
+        clearAccountCache()
+        setCheckIns([])
+        setSettings(loadSettings())
+        setCloudSync('idle')
+        setReady(false)
+        return
+      }
+
+      setReady(false)
+      setCloudSync('syncing')
+      setCloudError(null)
+
+      try {
+        const account = await hydrateAccount(userId)
         if (cancelled) return
-        setCheckIns(next)
+        setCheckIns(account.checkIns)
+        setSettings(account.settings)
         setCloudSync('synced')
-        setCloudError(null)
-      })
-      .catch((err: unknown) => {
+        setReady(true)
+      } catch (err: unknown) {
         if (cancelled) return
         const message = err instanceof Error ? err.message : String(err)
-        console.warn('Check-in sync failed', err)
+        console.warn('Account hydrate failed', err)
+        setStorageUserId(userId)
+        setCheckIns(loadCheckIns())
+        setSettings(loadSettings())
         setCloudSync('error')
         setCloudError(message)
-      })
+        setReady(true)
+      }
+    }
 
+    void load()
     return () => {
       cancelled = true
     }
+  }, [userId, syncNonce])
+
+  const retrySync = useCallback(() => {
+    setSyncNonce((n) => n + 1)
   }, [])
 
   const add = useCallback((checkIn: CheckIn) => {
@@ -77,36 +104,22 @@ export function useCheckIns() {
     void pushDeleteCheckIn(id)
   }, [])
 
-  return { checkIns, ready, add, update, remove, cloudSync, cloudError }
-}
-
-export function useSettings() {
-  const [settings, setSettings] = useState<AppSettings>(() => loadSettings())
-  const [ready, setReady] = useState(false)
-
-  useEffect(() => {
-    let cancelled = false
-    setSettings(loadSettings())
-    setReady(true)
-
-    void hydrateSettings()
-      .then((next) => {
-        if (!cancelled) setSettings(next)
-      })
-      .catch((err: unknown) => {
-        console.warn('Settings sync failed', err)
-      })
-
-    return () => {
-      cancelled = true
-    }
-  }, [])
-
   const updateSettings = useCallback((next: AppSettings) => {
     saveSettings(next)
     setSettings(next)
     void pushSettings(next)
   }, [])
 
-  return { settings, ready, updateSettings }
+  return {
+    checkIns,
+    settings,
+    ready,
+    add,
+    update,
+    remove,
+    updateSettings,
+    cloudSync,
+    cloudError,
+    retrySync,
+  }
 }
