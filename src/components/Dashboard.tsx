@@ -43,6 +43,36 @@ function resolveRange(filter: DateRangeFilter): { start: Date; end: Date } | nul
   return { start: startOfDay(subDays(now, days - 1)), end: endOfDay(now) }
 }
 
+/** Dot only for a lone chart value (no second point to draw a line). */
+function loneRatingDot(
+  catId: string,
+  catColor: string,
+  rawByCat: Record<string, Array<number | null>>,
+) {
+  return (props: {
+    cx?: number
+    cy?: number
+    index?: number
+  }) => {
+    const filled = fillGaps(rawByCat[catId] ?? [])
+    const drawn = filled.filter((v) => v !== null).length
+    if (drawn !== 1) return null
+    const index = props.index ?? -1
+    if (index < 0 || filled[index] == null) return null
+    if (props.cx == null || props.cy == null) return null
+    return (
+      <circle
+        cx={props.cx}
+        cy={props.cy}
+        r={5}
+        fill={catColor}
+        stroke="#fff"
+        strokeWidth={1.5}
+      />
+    )
+  }
+}
+
 export function Dashboard({ checkIns, categories }: DashboardProps) {
   const scaleCategories = useMemo(
     () => categories.filter((c) => c.hasScale),
@@ -94,6 +124,14 @@ export function Dashboard({ checkIns, categories }: DashboardProps) {
     })
   }, [checkIns, dateFilter])
 
+  const rawByCat = useMemo(() => {
+    const map: Record<string, Array<number | null>> = {}
+    for (const cat of scaleCategories) {
+      map[cat.id] = filtered.map((c) => c.entries[cat.id]?.value ?? null)
+    }
+    return map
+  }, [filtered, scaleCategories])
+
   const chartData = useMemo(() => {
     const rows: Array<Record<string, string | number | boolean | null>> =
       filtered.map((c) => ({
@@ -102,8 +140,7 @@ export function Dashboard({ checkIns, categories }: DashboardProps) {
       }))
 
     for (const cat of scaleCategories) {
-      const raw = filtered.map((c) => c.entries[cat.id]?.value ?? null)
-      const filledSeries = fillGaps(raw)
+      const filledSeries = fillGaps(rawByCat[cat.id] ?? [])
       filledSeries.forEach((value, i) => {
         rows[i][cat.id] = value
       })
@@ -122,7 +159,7 @@ export function Dashboard({ checkIns, categories }: DashboardProps) {
     }
 
     return rows
-  }, [filtered, scaleCategories, selectedActivity, moodCategory])
+  }, [filtered, scaleCategories, selectedActivity, moodCategory, rawByCat])
 
   const activityPointCount = useMemo(
     () =>
@@ -153,6 +190,167 @@ export function Dashboard({ checkIns, categories }: DashboardProps) {
     chartData.length > 0 &&
     (catsWithPoints.length > 0 || activityPointCount > 0)
 
+  const categoryFilters = (
+    <div className="filter-group">
+      <span className="filter-label">Category ratings</span>
+      {scaleCategories.length === 0 ? (
+        <p className="filter-hint">
+          No categories have a 1–10 scale enabled. Turn scales on in Settings.
+        </p>
+      ) : (
+        <div className="chip-row">
+          {scaleCategories.map((cat) => (
+            <button
+              key={cat.id}
+              type="button"
+              className={`chip ${isCatVisible(cat.id) ? 'is-active' : ''}`}
+              style={
+                isCatVisible(cat.id)
+                  ? ({ '--chip-accent': cat.color } as CSSProperties)
+                  : undefined
+              }
+              onClick={() =>
+                setVisibleCats((prev) => ({
+                  ...prev,
+                  [cat.id]: !isCatVisible(cat.id),
+                }))
+              }
+              aria-pressed={isCatVisible(cat.id)}
+            >
+              <span
+                className="chip-dot"
+                style={{ background: cat.color }}
+                aria-hidden
+              />
+              {cat.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+
+  const dateFilters = (
+    <div className="filter-group">
+      <span className="filter-label">Date range</span>
+      <div className="chip-row">
+        {(
+          [
+            ['7d', '7 days'],
+            ['30d', '30 days'],
+            ['90d', '90 days'],
+            ['all', 'All time'],
+            ['custom', 'Custom'],
+          ] as const
+        ).map(([key, label]) => (
+          <button
+            key={key}
+            type="button"
+            className={`chip ${dateFilter.preset === key ? 'is-active' : ''}`}
+            onClick={() => setPreset(key)}
+            aria-pressed={dateFilter.preset === key}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      {dateFilter.preset === 'custom' && (
+        <div className="custom-dates">
+          <label>
+            From
+            <input
+              type="date"
+              value={dateFilter.start ?? ''}
+              onChange={(e) =>
+                setDateFilter((prev) => ({
+                  ...prev,
+                  start: e.target.value || null,
+                }))
+              }
+            />
+          </label>
+          <label>
+            To
+            <input
+              type="date"
+              value={dateFilter.end ?? ''}
+              onChange={(e) =>
+                setDateFilter((prev) => ({
+                  ...prev,
+                  end: e.target.value || null,
+                }))
+              }
+            />
+          </label>
+        </div>
+      )}
+    </div>
+  )
+
+  const activityFilters = (
+    <div className="filter-group">
+      <span className="filter-label">Activity on Mood line</span>
+      {allActivities.length === 0 ? (
+        <p className="filter-hint">
+          Add activities on a check-in card or in Settings to plot them here.
+        </p>
+      ) : (
+        <>
+          <div className="chip-row" style={{ marginBottom: '0.35rem' }}>
+            <button
+              type="button"
+              className={`chip ${selectedActivityId === null ? 'is-active' : ''}`}
+              onClick={() => setSelectedActivityId(null)}
+              aria-pressed={selectedActivityId === null}
+            >
+              None
+            </button>
+          </div>
+          <ActivityChipGroups
+            activities={allActivities}
+            initiallyOpenIds={
+              selectedActivity ? [selectedActivity.categoryId] : []
+            }
+            groupMeta={(group) => {
+              const selected = group.activities.some(
+                (a) => a.id === selectedActivityId,
+              )
+              return selected
+                ? '1 selected'
+                : `${group.activities.length}`
+            }}
+            emptyHint="Add activities on a check-in card or in Settings to plot them here."
+            renderChip={(act) => (
+              <button
+                key={act.id}
+                type="button"
+                className={`chip chip-event ${selectedActivityId === act.id ? 'is-active' : ''}`}
+                style={
+                  selectedActivityId === act.id
+                    ? ({ '--chip-accent': act.color } as CSSProperties)
+                    : undefined
+                }
+                onClick={() =>
+                  setSelectedActivityId((prev) =>
+                    prev === act.id ? null : act.id,
+                  )
+                }
+                aria-pressed={selectedActivityId === act.id}
+              >
+                <span
+                  className="chip-dot"
+                  style={{ background: act.color }}
+                  aria-hidden
+                />
+                {act.label}
+              </button>
+            )}
+          />
+        </>
+      )}
+    </div>
+  )
+
   return (
     <section className="dashboard">
       <header className="panel-header">
@@ -160,167 +358,15 @@ export function Dashboard({ checkIns, categories }: DashboardProps) {
           <h2>Trends</h2>
           <p>
             Only categories with a 1–10 scale appear here. Log ratings on
-            Check-in to plot them; open a category to mark one activity on the
-            Mood line.
+            Check-in to plot them; pick one activity below the graph to mark on
+            the Mood line.
           </p>
         </div>
       </header>
 
       <div className="filters">
-        <div className="filter-group">
-          <span className="filter-label">Category ratings</span>
-          {scaleCategories.length === 0 ? (
-            <p className="filter-hint">
-              No categories have a 1–10 scale enabled. Turn scales on in Settings.
-            </p>
-          ) : (
-            <div className="chip-row">
-              {scaleCategories.map((cat) => (
-                <button
-                  key={cat.id}
-                  type="button"
-                  className={`chip ${isCatVisible(cat.id) ? 'is-active' : ''}`}
-                  style={
-                    isCatVisible(cat.id)
-                      ? ({ '--chip-accent': cat.color } as CSSProperties)
-                      : undefined
-                  }
-                  onClick={() =>
-                    setVisibleCats((prev) => ({
-                      ...prev,
-                      [cat.id]: !isCatVisible(cat.id),
-                    }))
-                  }
-                  aria-pressed={isCatVisible(cat.id)}
-                >
-                  <span
-                    className="chip-dot"
-                    style={{ background: cat.color }}
-                    aria-hidden
-                  />
-                  {cat.label}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <div className="filter-group">
-          <span className="filter-label">Activity on Mood line</span>
-          {allActivities.length === 0 ? (
-            <p className="filter-hint">
-              Add activities on a check-in card or in Settings to plot them here.
-            </p>
-          ) : (
-            <>
-              <div className="chip-row" style={{ marginBottom: '0.35rem' }}>
-                <button
-                  type="button"
-                  className={`chip ${selectedActivityId === null ? 'is-active' : ''}`}
-                  onClick={() => setSelectedActivityId(null)}
-                  aria-pressed={selectedActivityId === null}
-                >
-                  None
-                </button>
-              </div>
-              <ActivityChipGroups
-                activities={allActivities}
-                initiallyOpenIds={
-                  selectedActivity ? [selectedActivity.categoryId] : []
-                }
-                groupMeta={(group) => {
-                  const selected = group.activities.some(
-                    (a) => a.id === selectedActivityId,
-                  )
-                  return selected
-                    ? '1 selected'
-                    : `${group.activities.length}`
-                }}
-                emptyHint="Add activities on a check-in card or in Settings to plot them here."
-                renderChip={(act) => (
-                  <button
-                    key={act.id}
-                    type="button"
-                    className={`chip chip-event ${selectedActivityId === act.id ? 'is-active' : ''}`}
-                    style={
-                      selectedActivityId === act.id
-                        ? ({ '--chip-accent': act.color } as CSSProperties)
-                        : undefined
-                    }
-                    onClick={() =>
-                      setSelectedActivityId((prev) =>
-                        prev === act.id ? null : act.id,
-                      )
-                    }
-                    aria-pressed={selectedActivityId === act.id}
-                  >
-                    <span
-                      className="chip-dot"
-                      style={{ background: act.color }}
-                      aria-hidden
-                    />
-                    {act.label}
-                  </button>
-                )}
-              />
-            </>
-          )}
-        </div>
-
-        <div className="filter-group">
-          <span className="filter-label">Date range</span>
-          <div className="chip-row">
-            {(
-              [
-                ['7d', '7 days'],
-                ['30d', '30 days'],
-                ['90d', '90 days'],
-                ['all', 'All time'],
-                ['custom', 'Custom'],
-              ] as const
-            ).map(([key, label]) => (
-              <button
-                key={key}
-                type="button"
-                className={`chip ${dateFilter.preset === key ? 'is-active' : ''}`}
-                onClick={() => setPreset(key)}
-                aria-pressed={dateFilter.preset === key}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-          {dateFilter.preset === 'custom' && (
-            <div className="custom-dates">
-              <label>
-                From
-                <input
-                  type="date"
-                  value={dateFilter.start ?? ''}
-                  onChange={(e) =>
-                    setDateFilter((prev) => ({
-                      ...prev,
-                      start: e.target.value || null,
-                    }))
-                  }
-                />
-              </label>
-              <label>
-                To
-                <input
-                  type="date"
-                  value={dateFilter.end ?? ''}
-                  onChange={(e) =>
-                    setDateFilter((prev) => ({
-                      ...prev,
-                      end: e.target.value || null,
-                    }))
-                  }
-                />
-              </label>
-            </div>
-          )}
-        </div>
+        {categoryFilters}
+        {dateFilters}
       </div>
 
       <div className="chart-shell">
@@ -360,62 +406,66 @@ export function Dashboard({ checkIns, categories }: DashboardProps) {
               </p>
             )}
             <ResponsiveContainer width="100%" height={380}>
-            <ComposedChart data={chartData} margin={{ top: 12, right: 16, left: 0, bottom: 8 }}>
-              <CartesianGrid stroke="rgba(28, 42, 38, 0.08)" strokeDasharray="4 6" />
-              <XAxis
-                dataKey="label"
-                type="category"
-                allowDuplicatedCategory
-                tick={{ fill: '#5a6b64', fontSize: 11 }}
-                tickMargin={8}
-                interval="preserveStartEnd"
-              />
-              <YAxis
-                domain={[1, 10]}
-                ticks={[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]}
-                tick={{ fill: '#5a6b64', fontSize: 11 }}
-                width={32}
-              />
-              <ZAxis range={[110, 110]} />
-              <Tooltip
-                contentStyle={{
-                  background: '#f7faf8',
-                  border: '1px solid rgba(28, 42, 38, 0.12)',
-                  borderRadius: 12,
-                  boxShadow: '0 8px 24px rgba(20, 40, 32, 0.08)',
-                }}
-              />
-              <Legend />
-              {scaleCategories.map((cat) =>
-                isCatVisible(cat.id) ? (
-                  <Line
-                    key={cat.id}
-                    type="monotone"
-                    dataKey={cat.id}
-                    name={cat.label}
-                    stroke={cat.color}
-                    strokeWidth={2.5}
-                    // Single ratings (common for newly enabled scales like
-                    // Anxiety) need visible dots — a line segment alone won't draw.
-                    dot={{ r: 4, fill: cat.color, strokeWidth: 0 }}
-                    activeDot={{ r: 6 }}
-                    connectNulls
-                  />
-                ) : null,
-              )}
-              {selectedActivity ? (
-                <Scatter
-                  name={`${selectedActivity.categoryLabel}: ${selectedActivity.label}`}
-                  dataKey={ACTIVITY_Y_KEY}
-                  fill={selectedActivity.color}
-                  stroke="#fff"
-                  strokeWidth={1.5}
-                  shape="circle"
-                  legendType="circle"
+              <ComposedChart
+                data={chartData}
+                margin={{ top: 12, right: 16, left: 0, bottom: 8 }}
+              >
+                <CartesianGrid
+                  stroke="rgba(28, 42, 38, 0.08)"
+                  strokeDasharray="4 6"
                 />
-              ) : null}
-            </ComposedChart>
-          </ResponsiveContainer>
+                <XAxis
+                  dataKey="label"
+                  type="category"
+                  allowDuplicatedCategory
+                  tick={{ fill: '#5a6b64', fontSize: 11 }}
+                  tickMargin={8}
+                  interval="preserveStartEnd"
+                />
+                <YAxis
+                  domain={[1, 10]}
+                  ticks={[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]}
+                  tick={{ fill: '#5a6b64', fontSize: 11 }}
+                  width={32}
+                />
+                <ZAxis range={[110, 110]} />
+                <Tooltip
+                  contentStyle={{
+                    background: '#f7faf8',
+                    border: '1px solid rgba(28, 42, 38, 0.12)',
+                    borderRadius: 12,
+                    boxShadow: '0 8px 24px rgba(20, 40, 32, 0.08)',
+                  }}
+                />
+                <Legend />
+                {scaleCategories.map((cat) =>
+                  isCatVisible(cat.id) ? (
+                    <Line
+                      key={cat.id}
+                      type="monotone"
+                      dataKey={cat.id}
+                      name={cat.label}
+                      stroke={cat.color}
+                      strokeWidth={2.5}
+                      dot={loneRatingDot(cat.id, cat.color, rawByCat)}
+                      activeDot={{ r: 5 }}
+                      connectNulls
+                    />
+                  ) : null,
+                )}
+                {selectedActivity ? (
+                  <Scatter
+                    name={`${selectedActivity.categoryLabel}: ${selectedActivity.label}`}
+                    dataKey={ACTIVITY_Y_KEY}
+                    fill={selectedActivity.color}
+                    stroke="#fff"
+                    strokeWidth={1.5}
+                    shape="circle"
+                    legendType="circle"
+                  />
+                ) : null}
+              </ComposedChart>
+            </ResponsiveContainer>
           </>
         )}
       </div>
@@ -429,6 +479,8 @@ export function Dashboard({ checkIns, categories }: DashboardProps) {
           ? ` · ${selectedActivity.label} (${activityPointCount} point${activityPointCount === 1 ? '' : 's'})`
           : ''}
       </p>
+
+      <div className="filters filters--below-chart">{activityFilters}</div>
 
       <ActivityInsights checkIns={filtered} activities={allActivities} />
     </section>

@@ -112,7 +112,6 @@ export function CategorySlider({
         <span className="event-tags__label">Activities</span>
         {category.activities.map((tag) => {
           const active = entry.activityIds.includes(tag.id)
-          const tagColor = tag.color || category.color
           return (
             <button
               key={tag.id}
@@ -120,7 +119,7 @@ export function CategorySlider({
               className={`event-tag ${active ? 'is-active' : ''}`}
               style={
                 active
-                  ? ({ '--tag-accent': tagColor } as CSSProperties)
+                  ? ({ '--tag-accent': category.color } as CSSProperties)
                   : undefined
               }
               aria-pressed={active}

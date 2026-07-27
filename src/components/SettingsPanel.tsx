@@ -266,7 +266,7 @@ export function SettingsPanel({ settings, onChange }: SettingsPanelProps) {
                     <li key={tag.id} className="settings-event-row">
                       <span
                         className="chip-dot"
-                        style={{ background: tag.color || cat.color }}
+                        style={{ background: cat.color }}
                         aria-hidden
                       />
                       <input
