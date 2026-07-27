@@ -86,3 +86,5 @@ This repo’s Pages source is **Deploy from a branch → `main` → `/ (root)`**
 For a cleaner URL without `/docs`, switch **Settings → Pages → Source** to **GitHub Actions**, or set the branch folder to **`/docs`**.
 
 Pushes to `main` rebuild `docs/` via `.github/workflows/deploy.yml`, injecting whatever Supabase secrets Doppler has synced into GitHub Actions.
+
+If deploy fails with “No Supabase credentials”, open **Actions → Inspect Actions secrets → Run workflow** to see which secret names GitHub actually has. Then either rename secrets in Doppler to `SUPABASE_URL` / `SUPABASE_ANON`, or sync Doppler into this repo’s **Actions repository secrets** (not only Codespaces/Dependabot).

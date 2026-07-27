@@ -31,34 +31,87 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # Doppler's GitHub integration syncs project secrets into GitHub Actions
-      # secrets (e.g. SUPABASE_URL, SUPABASE_ANON). Pass them into the Vite
-      # build so they are baked into the static GitHub Pages bundle.
+      # Doppler may sync under any names. Read all Actions secrets, print key
+      # names for debugging, and normalize onto VITE_SUPABASE_* for Vite.
+      - name: Resolve Supabase secrets
+        id: supabase
+        env:
+          SECRETS_CONTEXT: ${{ toJson(secrets) }}
+        run: |
+          node <<'NODE'
+          const fs = require('fs')
+          const secrets = JSON.parse(process.env.SECRETS_CONTEXT || '{}')
+          const keys = Object.keys(secrets)
+          console.log('Secret keys visible to this job:')
+          for (const key of keys) console.log(`  - ${key}`)
+
+          function first(map, names) {
+            for (const key of names) {
+              const value = String(map[key] ?? '').trim()
+              if (value) return { key, value }
+            }
+            return null
+          }
+
+          function fuzzy(map, pred) {
+            for (const [key, raw] of Object.entries(map)) {
+              const value = String(raw ?? '').trim()
+              if (!value) continue
+              if (pred(key)) return { key, value }
+            }
+            return null
+          }
+
+          const url =
+            first(secrets, [
+              'VITE_SUPABASE_URL',
+              'SUPABASE_URL',
+              'NEXT_PUBLIC_SUPABASE_URL',
+              'PUBLIC_SUPABASE_URL',
+            ]) ||
+            fuzzy(secrets, (k) => /supabase/i.test(k) && /url/i.test(k))
+
+          const anon =
+            first(secrets, [
+              'VITE_SUPABASE_ANON_KEY',
+              'VITE_SUPABASE_ANON',
+              'SUPABASE_ANON_KEY',
+              'SUPABASE_ANON',
+              'NEXT_PUBLIC_SUPABASE_ANON_KEY',
+              'PUBLIC_SUPABASE_ANON_KEY',
+            ]) ||
+            fuzzy(secrets, (k) => /supabase/i.test(k) && /anon/i.test(k))
+
+          const related = keys.filter((k) => /supabase/i.test(k))
+          console.log('Supabase-related keys:', related.join(', ') || '(none)')
+
+          if (!url || !anon) {
+            fs.appendFileSync(process.env.GITHUB_OUTPUT, 'ok=false\n')
+            console.error('Could not resolve Supabase URL + anon key from Actions secrets.')
+            process.exit(0)
+          }
+
+          console.log(`Using URL from ${url.key}; anon from ${anon.key}`)
+          fs.appendFileSync(
+            process.env.GITHUB_ENV,
+            `VITE_SUPABASE_URL<<EOF\n${url.value}\nEOF\n` +
+              `SUPABASE_URL<<EOF\n${url.value}\nEOF\n` +
+              `VITE_SUPABASE_ANON_KEY<<EOF\n${anon.value}\nEOF\n` +
+              `SUPABASE_ANON<<EOF\n${anon.value}\nEOF\n`,
+          )
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, 'ok=true\n')
+          NODE
+
+      - name: Fail if Supabase secrets are missing
+        if: steps.supabase.outputs.ok != 'true'
+        run: |
+          echo "::error::No Supabase credentials in GitHub Actions for this job. In Doppler → Integrations → GitHub, sync to this repo's Actions secrets (names like SUPABASE_URL + SUPABASE_ANON). Run the Inspect Actions secrets workflow to see which keys GitHub has. If secrets are in a GitHub Environment, re-sync Doppler to repository secrets or run Inspect with that environment name."
+          exit 1
+
       - name: Build
         run: npm run build
         env:
           VITE_BASE_PATH: ./
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_ANON: ${{ secrets.SUPABASE_ANON }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_ANON: ${{ secrets.VITE_SUPABASE_ANON }}
-          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
-
-      - name: Verify Supabase env was present for build
-        run: |
-          if [ -z "${SUPABASE_URL:-}${VITE_SUPABASE_URL:-}" ] || [ -z "${SUPABASE_ANON:-}${SUPABASE_ANON_KEY:-}${VITE_SUPABASE_ANON:-}${VITE_SUPABASE_ANON_KEY:-}" ]; then
-            echo "::warning::No Supabase URL/anon secrets found in GitHub Actions. The site will stay localStorage-only. Confirm Doppler is syncing SUPABASE_URL and SUPABASE_ANON (or VITE_*) into this repo's Actions secrets."
-          else
-            echo "Supabase credentials detected for this build."
-          fi
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_ANON: ${{ secrets.SUPABASE_ANON }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_ANON: ${{ secrets.VITE_SUPABASE_ANON }}
-          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
 
       - name: Commit built site to docs/
         run: |
