@@ -6,6 +6,7 @@ import { Dashboard } from './components/Dashboard'
 import { HistoryList } from './components/HistoryList'
 import { SettingsPanel } from './components/SettingsPanel'
 import { useCheckIns, useSettings } from './hooks/useCheckIns'
+import { isSupabaseConfigured } from './lib/env'
 import './App.css'
 
 type View = 'checkin' | 'trends' | 'history' | 'settings'
@@ -122,7 +123,11 @@ export default function App() {
       </main>
 
       <footer className="site-footer">
-        <p>Data stays in your browser via localStorage — nothing is uploaded.</p>
+        <p>
+          {isSupabaseConfigured()
+            ? 'Synced to Supabase when available; always cached in your browser.'
+            : 'Data stays in your browser via localStorage — nothing is uploaded.'}
+        </p>
       </footer>
 
       {renderNav('nav mobile-nav', 'Mobile')}
