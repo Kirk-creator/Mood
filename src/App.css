@@ -615,6 +615,10 @@
   margin-bottom: 1.1rem;
 }
 
+.filters--below-chart {
+  margin-top: 1.25rem;
+}
+
 .filter-group {
   display: grid;
   gap: 0.5rem;
