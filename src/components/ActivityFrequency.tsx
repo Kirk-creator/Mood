@@ -15,6 +15,7 @@ import {
   type FrequencyGranularity,
 } from '../chartUtils'
 import type { CheckIn } from '../types'
+import { ActivityChipGroups } from './ActivityChipGroups'
 
 interface ActivityFrequencyProps {
   /** Check-ins already limited to the selected date range */
@@ -60,6 +61,14 @@ export function ActivityFrequency({ checkIns, activities }: ActivityFrequencyPro
     setHiddenIds((prev) => ({ ...prev, [id]: !prev[id] }))
   }
 
+  function setGroupVisibility(ids: string[], showAll: boolean) {
+    setHiddenIds((prev) => {
+      const next = { ...prev }
+      for (const id of ids) next[id] = !showAll
+      return next
+    })
+  }
+
   return (
     <section className="frequency">
       <header className="panel-header">
@@ -67,7 +76,7 @@ export function ActivityFrequency({ checkIns, activities }: ActivityFrequencyPro
           <h2>Activity frequency</h2>
           <p>
             How often each activity is logged — stacked by color so you can compare
-            them at a glance.
+            them at a glance. Open a category to show or hide its activities.
           </p>
         </div>
       </header>
@@ -82,9 +91,17 @@ export function ActivityFrequency({ checkIns, activities }: ActivityFrequencyPro
         <>
           <div className="filters">
             <div className="filter-group">
-              <span className="filter-label">Activities</span>
-              <div className="chip-row">
-                {activities.map((act) => {
+              <span className="filter-label">Activities by category</span>
+              <ActivityChipGroups
+                activities={activities}
+                initiallyOpenIds={[]}
+                groupMeta={(group) => {
+                  const shown = group.activities.filter((a) => !hiddenIds[a.id])
+                    .length
+                  return `${shown}/${group.activities.length}`
+                }}
+                emptyHint="Add activities on a check-in card to see how often they happen."
+                renderChip={(act) => {
                   const active = !hiddenIds[act.id]
                   return (
                     <button
@@ -104,11 +121,26 @@ export function ActivityFrequency({ checkIns, activities }: ActivityFrequencyPro
                         style={{ background: act.color }}
                         aria-hidden
                       />
-                      {act.categoryLabel}: {act.label}
+                      {act.label}
                     </button>
                   )
-                })}
-              </div>
+                }}
+                renderGroupActions={(group) => {
+                  const ids = group.activities.map((a) => a.id)
+                  const allShown = ids.every((id) => !hiddenIds[id])
+                  return (
+                    <div className="activity-chip-group__actions">
+                      <button
+                        type="button"
+                        className="link-btn"
+                        onClick={() => setGroupVisibility(ids, !allShown)}
+                      >
+                        {allShown ? 'Hide all' : 'Show all'}
+                      </button>
+                    </div>
+                  )
+                }}
+              />
             </div>
 
             <div className="filter-group">

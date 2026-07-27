@@ -13,6 +13,7 @@ import {
 } from 'recharts'
 import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { fillGaps, flattenActivities } from '../chartUtils'
+import { ActivityChipGroups } from './ActivityChipGroups'
 import { ActivityFrequency } from './ActivityFrequency'
 import type {
   CategoryConfig,
@@ -147,8 +148,8 @@ export function Dashboard({ checkIns, categories }: DashboardProps) {
         <div>
           <h2>Trends</h2>
           <p>
-            Compare category ratings over time. Pick one activity to mark as dots
-            along the Mood line.
+            Compare category ratings over time. Open a category to pick one
+            activity to mark as dots along the Mood line.
           </p>
         </div>
       </header>
@@ -199,41 +200,58 @@ export function Dashboard({ checkIns, categories }: DashboardProps) {
               Add activities on a check-in card or in Settings to plot them here.
             </p>
           ) : (
-            <div className="chip-row">
-              <button
-                type="button"
-                className={`chip ${selectedActivityId === null ? 'is-active' : ''}`}
-                onClick={() => setSelectedActivityId(null)}
-                aria-pressed={selectedActivityId === null}
-              >
-                None
-              </button>
-              {allActivities.map((act) => (
+            <>
+              <div className="chip-row" style={{ marginBottom: '0.35rem' }}>
                 <button
-                  key={act.id}
                   type="button"
-                  className={`chip chip-event ${selectedActivityId === act.id ? 'is-active' : ''}`}
-                  style={
-                    selectedActivityId === act.id
-                      ? ({ '--chip-accent': act.color } as CSSProperties)
-                      : undefined
-                  }
-                  onClick={() =>
-                    setSelectedActivityId((prev) =>
-                      prev === act.id ? null : act.id,
-                    )
-                  }
-                  aria-pressed={selectedActivityId === act.id}
+                  className={`chip ${selectedActivityId === null ? 'is-active' : ''}`}
+                  onClick={() => setSelectedActivityId(null)}
+                  aria-pressed={selectedActivityId === null}
                 >
-                  <span
-                    className="chip-dot"
-                    style={{ background: act.color }}
-                    aria-hidden
-                  />
-                  {act.categoryLabel}: {act.label}
+                  None
                 </button>
-              ))}
-            </div>
+              </div>
+              <ActivityChipGroups
+                activities={allActivities}
+                initiallyOpenIds={
+                  selectedActivity ? [selectedActivity.categoryId] : []
+                }
+                groupMeta={(group) => {
+                  const selected = group.activities.some(
+                    (a) => a.id === selectedActivityId,
+                  )
+                  return selected
+                    ? '1 selected'
+                    : `${group.activities.length}`
+                }}
+                emptyHint="Add activities on a check-in card or in Settings to plot them here."
+                renderChip={(act) => (
+                  <button
+                    key={act.id}
+                    type="button"
+                    className={`chip chip-event ${selectedActivityId === act.id ? 'is-active' : ''}`}
+                    style={
+                      selectedActivityId === act.id
+                        ? ({ '--chip-accent': act.color } as CSSProperties)
+                        : undefined
+                    }
+                    onClick={() =>
+                      setSelectedActivityId((prev) =>
+                        prev === act.id ? null : act.id,
+                      )
+                    }
+                    aria-pressed={selectedActivityId === act.id}
+                  >
+                    <span
+                      className="chip-dot"
+                      style={{ background: act.color }}
+                      aria-hidden
+                    />
+                    {act.label}
+                  </button>
+                )}
+              />
+            </>
           )}
         </div>
 
