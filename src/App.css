@@ -1070,6 +1070,15 @@
     font-size: 0.78rem;
   }
 
+  .header-meta-block {
+    justify-self: end;
+  }
+
+  .header-user {
+    max-width: 9.5rem;
+    font-size: 0.68rem;
+  }
+
   .mobile-nav {
     display: flex;
     position: fixed;
