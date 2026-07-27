@@ -31,10 +31,20 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Install Doppler CLI
+        if: ${{ secrets.DOPPLER_TOKEN != '' }}
+        uses: dopplerhq/cli-action@v3
+
       - name: Build
-        run: npm run build
+        run: |
+          if [ -n "${DOPPLER_TOKEN:-}" ]; then
+            doppler run -- npm run build
+          else
+            npm run build
+          fi
         env:
           VITE_BASE_PATH: ./
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
 
       - name: Commit built site to docs/
         run: |

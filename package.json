@@ -5,11 +5,15 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:doppler": "doppler run -- vite",
     "build": "tsc -b && vite build && node scripts/prepare-docs.mjs",
+    "build:doppler": "doppler run -- npm run build",
     "lint": "oxlint src",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "preview:doppler": "doppler run -- vite preview"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.110.9",
     "canvas-confetti": "^1.9.4",
     "date-fns": "^4.4.0",
     "react": "^19.2.7",

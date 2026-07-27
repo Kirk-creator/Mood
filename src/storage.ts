@@ -35,7 +35,7 @@ function normalizeEntry(raw: unknown): { entry: CategoryEntry; legacyNotes: stri
   return { entry: { value, activityIds }, legacyNotes }
 }
 
-function normalizeCheckIn(raw: unknown): CheckIn | null {
+export function normalizeCheckIn(raw: unknown): CheckIn | null {
   if (!isObject(raw)) return null
   if (typeof raw.id !== 'string' || typeof raw.timestamp !== 'string') return null
 
@@ -160,19 +160,22 @@ function normalizeCategory(raw: unknown): CategoryConfig | null {
   }
 }
 
+export function normalizeSettings(raw: unknown): AppSettings {
+  if (!isObject(raw) || !Array.isArray(raw.categories)) {
+    return defaultSettings()
+  }
+  const categories = raw.categories
+    .map(normalizeCategory)
+    .filter((c): c is CategoryConfig => c !== null)
+  if (categories.length === 0) return defaultSettings()
+  return { categories }
+}
+
 export function loadSettings(): AppSettings {
   try {
     const raw = localStorage.getItem(SETTINGS_KEY)
     if (!raw) return defaultSettings()
-    const parsed: unknown = JSON.parse(raw)
-    if (!isObject(parsed) || !Array.isArray(parsed.categories)) {
-      return defaultSettings()
-    }
-    const categories = parsed.categories
-      .map(normalizeCategory)
-      .filter((c): c is CategoryConfig => c !== null)
-    if (categories.length === 0) return defaultSettings()
-    return { categories }
+    return normalizeSettings(JSON.parse(raw) as unknown)
   } catch {
     return defaultSettings()
   }
