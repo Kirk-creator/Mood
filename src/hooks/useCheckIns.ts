@@ -27,7 +27,11 @@ export type CloudSyncState =
 
 export function useCheckIns(userId: string | null) {
   const [checkIns, setCheckIns] = useState<CheckIn[]>([])
-  const [settings, setSettings] = useState<AppSettings>(() => loadSettings())
+  const [settings, setSettings] = useState<AppSettings>(() => {
+    const loaded = loadSettings()
+    saveSettings(loaded)
+    return loaded
+  })
   const [ready, setReady] = useState(false)
   const [cloudSync, setCloudSync] = useState<CloudSyncState>('idle')
   const [cloudError, setCloudError] = useState<string | null>(null)
@@ -36,11 +40,17 @@ export function useCheckIns(userId: string | null) {
   useEffect(() => {
     let cancelled = false
 
+    function loadLocalSettings() {
+      const loaded = loadSettings()
+      saveSettings(loaded)
+      return loaded
+    }
+
     async function load() {
       if (!isSupabaseConfigured()) {
         setStorageUserId(null)
         setCheckIns(loadCheckIns())
-        setSettings(loadSettings())
+        setSettings(loadLocalSettings())
         setCloudSync('local-only')
         setReady(true)
         return
@@ -49,7 +59,7 @@ export function useCheckIns(userId: string | null) {
       if (!userId) {
         clearAccountCache()
         setCheckIns([])
-        setSettings(loadSettings())
+        setSettings(loadLocalSettings())
         setCloudSync('idle')
         setReady(false)
         return
@@ -72,7 +82,9 @@ export function useCheckIns(userId: string | null) {
         console.warn('Account hydrate failed', err)
         setStorageUserId(userId)
         setCheckIns(loadCheckIns())
-        setSettings(loadSettings())
+        const loaded = loadSettings()
+        saveSettings(loaded)
+        setSettings(loaded)
         setCloudSync('error')
         setCloudError(message)
         setReady(true)

@@ -65,7 +65,10 @@ export function Dashboard({ checkIns, categories }: DashboardProps) {
     end: null,
   })
 
-  const allActivities = useMemo(() => flattenActivities(categories), [categories])
+  const allActivities = useMemo(
+    () => flattenActivities(categories),
+    [categories],
+  )
 
   const selectedActivity =
     allActivities.find((a) => a.id === selectedActivityId) ?? null
@@ -137,10 +140,18 @@ export function Dashboard({ checkIns, categories }: DashboardProps) {
     return visibleCats[id] !== false
   }
 
-  const activeCatCount = scaleCategories.filter((c) => isCatVisible(c.id)).length
+  const visibleScaleCats = scaleCategories.filter((c) => isCatVisible(c.id))
+  const emptyVisibleCats = visibleScaleCats.filter(
+    (cat) => !chartData.some((row) => row[cat.id] != null),
+  )
+  const catsWithPoints = visibleScaleCats.filter((cat) =>
+    chartData.some((row) => row[cat.id] != null),
+  )
+  const activeCatCount = visibleScaleCats.length
   const hasVisibleContent = activeCatCount > 0 || selectedActivity !== null
   const hasPoints =
-    chartData.length > 0 && (activeCatCount > 0 || activityPointCount > 0)
+    chartData.length > 0 &&
+    (catsWithPoints.length > 0 || activityPointCount > 0)
 
   return (
     <section className="dashboard">
@@ -148,8 +159,9 @@ export function Dashboard({ checkIns, categories }: DashboardProps) {
         <div>
           <h2>Trends</h2>
           <p>
-            Every category with a 1–10 scale appears on the graph. Open a
-            category to pick one activity to mark as dots along the Mood line.
+            Only categories with a 1–10 scale appear here. Log ratings on
+            Check-in to plot them; open a category to mark one activity on the
+            Mood line.
           </p>
         </div>
       </header>
@@ -319,15 +331,35 @@ export function Dashboard({ checkIns, categories }: DashboardProps) {
                 ? 'No check-ins yet. Log your first entry to see trends.'
                 : !hasVisibleContent
                   ? 'Select a category rating or one activity to plot.'
-                  : selectedActivity && activityPointCount === 0 && activeCatCount === 0
+                  : selectedActivity &&
+                      activityPointCount === 0 &&
+                      catsWithPoints.length === 0
                     ? moodCategory
-                      ? 'That activity has no Mood ratings to sit on in this range.'
+                      ? emptyVisibleCats.length > 0
+                        ? `${emptyVisibleCats.map((c) => c.label).join(', ')} ${
+                            emptyVisibleCats.length === 1 ? 'has' : 'have'
+                          } no ratings in this range yet. Log them on Check-in to plot.`
+                        : 'That activity has no Mood ratings to sit on in this range.'
                       : 'Add a Mood category to place activity dots.'
-                    : 'No check-ins in this date range.'}
+                    : emptyVisibleCats.length === activeCatCount &&
+                        activityPointCount === 0
+                      ? `${emptyVisibleCats.map((c) => c.label).join(', ')} ${
+                          emptyVisibleCats.length === 1 ? 'has' : 'have'
+                        } no ratings in this range yet. Log them on Check-in to plot.`
+                      : 'No check-ins in this date range.'}
             </p>
           </div>
         ) : (
-          <ResponsiveContainer width="100%" height={380}>
+          <>
+            {emptyVisibleCats.length > 0 && (
+              <p className="filter-hint chart-empty-series" role="status">
+                {emptyVisibleCats.map((c) => c.label).join(', ')}{' '}
+                {emptyVisibleCats.length === 1 ? 'has' : 'have'} no ratings in
+                this range yet — log on Check-in to draw{' '}
+                {emptyVisibleCats.length === 1 ? 'that line' : 'those lines'}.
+              </p>
+            )}
+            <ResponsiveContainer width="100%" height={380}>
             <ComposedChart data={chartData} margin={{ top: 12, right: 16, left: 0, bottom: 8 }}>
               <CartesianGrid stroke="rgba(28, 42, 38, 0.08)" strokeDasharray="4 6" />
               <XAxis
@@ -363,8 +395,10 @@ export function Dashboard({ checkIns, categories }: DashboardProps) {
                     name={cat.label}
                     stroke={cat.color}
                     strokeWidth={2.5}
-                    dot={false}
-                    activeDot={{ r: 5 }}
+                    // Single ratings (common for newly enabled scales like
+                    // Anxiety) need visible dots — a line segment alone won't draw.
+                    dot={{ r: 4, fill: cat.color, strokeWidth: 0 }}
+                    activeDot={{ r: 6 }}
                     connectNulls
                   />
                 ) : null,
@@ -382,6 +416,7 @@ export function Dashboard({ checkIns, categories }: DashboardProps) {
               ) : null}
             </ComposedChart>
           </ResponsiveContainer>
+          </>
         )}
       </div>
 

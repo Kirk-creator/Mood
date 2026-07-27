@@ -103,8 +103,8 @@ export function CheckInForm({
         <div>
           <h2>New check-in</h2>
           <p>
-            Tap a rating bubble, add activities right on each category, and save
-            when you have something to log.
+            Rate categories with a 1–10 scale, add activities, and save when you
+            have something to log.
           </p>
         </div>
         {savedFlash && (
