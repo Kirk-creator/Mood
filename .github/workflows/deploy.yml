@@ -31,20 +31,34 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Install Doppler CLI
-        if: ${{ secrets.DOPPLER_TOKEN != '' }}
-        uses: dopplerhq/cli-action@v3
-
+      # Doppler's GitHub integration syncs project secrets into GitHub Actions
+      # secrets (e.g. SUPABASE_URL, SUPABASE_ANON). Pass them into the Vite
+      # build so they are baked into the static GitHub Pages bundle.
       - name: Build
-        run: |
-          if [ -n "${DOPPLER_TOKEN:-}" ]; then
-            doppler run -- npm run build
-          else
-            npm run build
-          fi
+        run: npm run build
         env:
           VITE_BASE_PATH: ./
-          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON: ${{ secrets.SUPABASE_ANON }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON: ${{ secrets.VITE_SUPABASE_ANON }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+
+      - name: Verify Supabase env was present for build
+        run: |
+          if [ -z "${SUPABASE_URL:-}${VITE_SUPABASE_URL:-}" ] || [ -z "${SUPABASE_ANON:-}${SUPABASE_ANON_KEY:-}${VITE_SUPABASE_ANON:-}${VITE_SUPABASE_ANON_KEY:-}" ]; then
+            echo "::warning::No Supabase URL/anon secrets found in GitHub Actions. The site will stay localStorage-only. Confirm Doppler is syncing SUPABASE_URL and SUPABASE_ANON (or VITE_*) into this repo's Actions secrets."
+          else
+            echo "Supabase credentials detected for this build."
+          fi
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON: ${{ secrets.SUPABASE_ANON }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON: ${{ secrets.VITE_SUPABASE_ANON }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
 
       - name: Commit built site to docs/
         run: |

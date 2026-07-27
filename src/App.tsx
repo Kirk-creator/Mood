@@ -19,7 +19,8 @@ const NAV_ITEMS = [
 ]
 
 export default function App() {
-  const { checkIns, ready, add, update, remove } = useCheckIns()
+  const { checkIns, ready, add, update, remove, cloudSync, cloudError } =
+    useCheckIns()
   const { settings, updateSettings } = useSettings()
   const [view, setView] = useState<View>('checkin')
 
@@ -124,10 +125,22 @@ export default function App() {
 
       <footer className="site-footer">
         <p>
-          {isSupabaseConfigured()
-            ? 'Synced to Supabase when available; always cached in your browser.'
-            : 'Data stays in your browser via localStorage — nothing is uploaded.'}
+          {cloudSync === 'local-only' &&
+            'Data stays in your browser via localStorage — nothing is uploaded.'}
+          {cloudSync === 'syncing' &&
+            'Connecting to Supabase and uploading local check-ins…'}
+          {cloudSync === 'synced' &&
+            'Synced to Supabase; also cached in your browser.'}
+          {cloudSync === 'error' &&
+            `Cloud sync failed${cloudError ? `: ${cloudError}` : ''}. Still using local data.`}
         </p>
+        {isSupabaseConfigured() ? null : (
+          <p className="site-footer-hint">
+            Supabase keys were not baked into this build. After Doppler syncs
+            SUPABASE_URL + SUPABASE_ANON to GitHub Actions, re-run the deploy
+            workflow.
+          </p>
+        )}
       </footer>
 
       {renderNav('nav mobile-nav', 'Mobile')}
