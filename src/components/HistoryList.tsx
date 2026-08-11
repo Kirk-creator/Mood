@@ -1,5 +1,6 @@
 import { format, parseISO } from 'date-fns'
 import { useState, type FormEvent } from 'react'
+import { createPortal } from 'react-dom'
 import {
   emptyEntries,
   hasAnyData,
@@ -126,18 +127,21 @@ export function HistoryList({
         </ul>
       )}
 
-      {editing && (
-        <EditModal
-          checkIn={editing}
-          categories={categories}
-          onAddActivity={onAddActivity}
-          onClose={() => setEditing(null)}
-          onSave={(next) => {
-            onUpdate(next)
-            setEditing(null)
-          }}
-        />
-      )}
+      {editing
+        ? createPortal(
+            <EditModal
+              checkIn={editing}
+              categories={categories}
+              onAddActivity={onAddActivity}
+              onClose={() => setEditing(null)}
+              onSave={(next) => {
+                onUpdate(next)
+                setEditing(null)
+              }}
+            />,
+            document.body,
+          )
+        : null}
     </section>
   )
 }

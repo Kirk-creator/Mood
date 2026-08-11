@@ -1016,7 +1016,8 @@
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    /* `none` avoids leaving a transform containing block that traps position:fixed modals */
+    transform: none;
   }
 }
 
