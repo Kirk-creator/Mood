@@ -1,3 +1,4 @@
+import { format, parseISO } from 'date-fns'
 import type { CategoryConfig, CheckIn } from './types'
 
 /**
@@ -29,6 +30,74 @@ export function fillGaps(values: Array<number | null>): Array<number | null> {
     }
   }
   return out
+}
+
+export interface DayAveragePoint {
+  /** Local calendar day key, yyyy-MM-dd */
+  dayKey: string
+  /** Chart / tooltip label, e.g. "Mar 4" */
+  label: string
+  /** Mean of non-null ratings that day, keyed by category id */
+  averages: Record<string, number | null>
+  /** Activity ids logged on any check-in that day */
+  activityIds: string[]
+  checkInCount: number
+}
+
+function mean(values: number[]): number | null {
+  if (values.length === 0) return null
+  const sum = values.reduce((acc, v) => acc + v, 0)
+  return Math.round((sum / values.length) * 10) / 10
+}
+
+/**
+ * Collapse check-ins onto local calendar days: one chart point per day with
+ * averaged scale ratings and the union of activity tags logged that day.
+ * Expects check-ins already sorted chronologically.
+ */
+export function averageCheckInsByDay(
+  checkIns: CheckIn[],
+  scaleCategoryIds: string[],
+): DayAveragePoint[] {
+  const byDay = new Map<
+    string,
+    {
+      values: Record<string, number[]>
+      activityIds: Set<string>
+      checkInCount: number
+    }
+  >()
+
+  for (const checkIn of checkIns) {
+    const dayKey = format(parseISO(checkIn.timestamp), 'yyyy-MM-dd')
+    let bucket = byDay.get(dayKey)
+    if (!bucket) {
+      bucket = {
+        values: Object.fromEntries(scaleCategoryIds.map((id) => [id, []])),
+        activityIds: new Set(),
+        checkInCount: 0,
+      }
+      byDay.set(dayKey, bucket)
+    }
+    bucket.checkInCount += 1
+    for (const catId of scaleCategoryIds) {
+      const value = checkIn.entries[catId]?.value
+      if (value != null) bucket.values[catId].push(value)
+    }
+    for (const entry of Object.values(checkIn.entries)) {
+      for (const id of entry.activityIds) bucket.activityIds.add(id)
+    }
+  }
+
+  return [...byDay.entries()].map(([dayKey, bucket]) => ({
+    dayKey,
+    label: format(parseISO(`${dayKey}T12:00:00`), 'MMM d'),
+    averages: Object.fromEntries(
+      scaleCategoryIds.map((id) => [id, mean(bucket.values[id] ?? [])]),
+    ),
+    activityIds: [...bucket.activityIds],
+    checkInCount: bucket.checkInCount,
+  }))
 }
 
 export interface FlatActivity {

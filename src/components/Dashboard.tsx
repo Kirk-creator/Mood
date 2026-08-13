@@ -12,7 +12,11 @@ import {
   ZAxis,
 } from 'recharts'
 import { useEffect, useMemo, useState, type CSSProperties } from 'react'
-import { fillGaps, flattenActivities } from '../chartUtils'
+import {
+  averageCheckInsByDay,
+  fillGaps,
+  flattenActivities,
+} from '../chartUtils'
 import { ActivityChipGroups } from './ActivityChipGroups'
 import { ActivityInsights } from './ActivityInsights'
 import type {
@@ -89,6 +93,7 @@ export function Dashboard({ checkIns, categories }: DashboardProps) {
 
   const [visibleCats, setVisibleCats] = useState<Record<string, boolean>>({})
   const [selectedActivityId, setSelectedActivityId] = useState<string | null>(null)
+  const [dailyAverage, setDailyAverage] = useState(false)
   const [dateFilter, setDateFilter] = useState<DateRangeFilter>({
     preset: '30d',
     start: null,
@@ -124,15 +129,51 @@ export function Dashboard({ checkIns, categories }: DashboardProps) {
     })
   }, [checkIns, dateFilter])
 
+  const dayPoints = useMemo(() => {
+    if (!dailyAverage) return null
+    return averageCheckInsByDay(
+      filtered,
+      scaleCategories.map((c) => c.id),
+    )
+  }, [dailyAverage, filtered, scaleCategories])
+
   const rawByCat = useMemo(() => {
     const map: Record<string, Array<number | null>> = {}
     for (const cat of scaleCategories) {
-      map[cat.id] = filtered.map((c) => c.entries[cat.id]?.value ?? null)
+      map[cat.id] = dayPoints
+        ? dayPoints.map((d) => d.averages[cat.id] ?? null)
+        : filtered.map((c) => c.entries[cat.id]?.value ?? null)
     }
     return map
-  }, [filtered, scaleCategories])
+  }, [filtered, scaleCategories, dayPoints])
 
   const chartData = useMemo(() => {
+    if (dayPoints) {
+      const rows: Array<Record<string, string | number | boolean | null>> =
+        dayPoints.map((d) => ({
+          id: d.dayKey,
+          label: d.label,
+          checkInCount: d.checkInCount,
+        }))
+
+      for (const cat of scaleCategories) {
+        const filledSeries = fillGaps(rawByCat[cat.id] ?? [])
+        filledSeries.forEach((value, i) => {
+          rows[i][cat.id] = value
+        })
+      }
+
+      if (selectedActivity && moodCategory) {
+        const moodFilled = fillGaps(rawByCat[moodCategory.id] ?? [])
+        dayPoints.forEach((d, i) => {
+          const logged = d.activityIds.includes(selectedActivity.id)
+          rows[i][ACTIVITY_Y_KEY] = logged ? moodFilled[i] : null
+        })
+      }
+
+      return rows
+    }
+
     const rows: Array<Record<string, string | number | boolean | null>> =
       filtered.map((c) => ({
         id: c.id,
@@ -159,7 +200,7 @@ export function Dashboard({ checkIns, categories }: DashboardProps) {
     }
 
     return rows
-  }, [filtered, scaleCategories, selectedActivity, moodCategory, rawByCat])
+  }, [filtered, scaleCategories, selectedActivity, moodCategory, rawByCat, dayPoints])
 
   const activityPointCount = useMemo(
     () =>
@@ -287,6 +328,30 @@ export function Dashboard({ checkIns, categories }: DashboardProps) {
     </div>
   )
 
+  const viewFilters = (
+    <div className="filter-group">
+      <span className="filter-label">Line view</span>
+      <div className="chip-row">
+        <button
+          type="button"
+          className={`chip ${!dailyAverage ? 'is-active' : ''}`}
+          onClick={() => setDailyAverage(false)}
+          aria-pressed={!dailyAverage}
+        >
+          Each check-in
+        </button>
+        <button
+          type="button"
+          className={`chip ${dailyAverage ? 'is-active' : ''}`}
+          onClick={() => setDailyAverage(true)}
+          aria-pressed={dailyAverage}
+        >
+          Daily average
+        </button>
+      </div>
+    </div>
+  )
+
   const activityFilters = (
     <div className="filter-group">
       <span className="filter-label">Activity on Mood line</span>
@@ -358,8 +423,9 @@ export function Dashboard({ checkIns, categories }: DashboardProps) {
           <h2>Trends</h2>
           <p>
             Only categories with a 1–10 scale appear here. Log ratings on
-            Check-in to plot them; pick one activity below the graph to mark on
-            the Mood line.
+            Check-in to plot them; switch to Daily average to smooth multiple
+            check-ins into one point per day. Pick one activity below the graph
+            to mark on the Mood line.
           </p>
         </div>
       </header>
@@ -367,6 +433,7 @@ export function Dashboard({ checkIns, categories }: DashboardProps) {
       <div className="filters">
         {categoryFilters}
         {dateFilters}
+        {viewFilters}
       </div>
 
       <div className="chart-shell">
@@ -430,6 +497,13 @@ export function Dashboard({ checkIns, categories }: DashboardProps) {
                 />
                 <ZAxis range={[110, 110]} />
                 <Tooltip
+                  labelFormatter={(label, payload) => {
+                    const count = payload?.[0]?.payload?.checkInCount
+                    if (dailyAverage && typeof count === 'number') {
+                      return `${label} · ${count} check-in${count === 1 ? '' : 's'}`
+                    }
+                    return String(label)
+                  }}
                   contentStyle={{
                     background: '#f7faf8',
                     border: '1px solid rgba(28, 42, 38, 0.12)',
@@ -471,7 +545,9 @@ export function Dashboard({ checkIns, categories }: DashboardProps) {
       </div>
 
       <p className="chart-meta">
-        Showing {filtered.length} check-in{filtered.length === 1 ? '' : 's'}
+        {dailyAverage && dayPoints
+          ? `Showing ${dayPoints.length} day${dayPoints.length === 1 ? '' : 's'} · ${filtered.length} check-in${filtered.length === 1 ? '' : 's'} averaged`
+          : `Showing ${filtered.length} check-in${filtered.length === 1 ? '' : 's'}`}
         {activeCatCount > 0
           ? ` · ${activeCatCount} categor${activeCatCount === 1 ? 'y' : 'ies'}`
           : ''}
