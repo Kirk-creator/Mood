@@ -4,6 +4,8 @@ export const CHECKINS_KEY = 'pulse-checkins-v2'
 /** Legacy key — migrated once into v2 */
 export const LEGACY_CHECKINS_KEY = 'pulse-checkins-v1'
 export const SETTINGS_KEY = 'pulse-settings-v1'
+/** In-progress check-in form draft (not yet submitted). */
+export const CHECKIN_DRAFT_KEY = 'pulse-checkin-draft-v1'
 
 /** Pre-auth stock categories — used to detect accounts that still need slimming. */
 export const LEGACY_STOCK_CATEGORY_IDS = [

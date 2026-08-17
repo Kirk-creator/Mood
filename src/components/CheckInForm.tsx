@@ -2,6 +2,12 @@ import { useEffect, useState, type FormEvent } from 'react'
 import confetti from 'canvas-confetti'
 import { v4 as uuidv4 } from 'uuid'
 import {
+  applyCheckInDraft,
+  clearCheckInDraft,
+  loadCheckInDraft,
+  saveCheckInDraft,
+} from '../storage'
+import {
   emptyEntries,
   hasAnyData,
   type CategoryConfig,
@@ -11,6 +17,7 @@ import {
 import { CategorySlider } from './CategorySlider'
 
 interface CheckInFormProps {
+  userId: string | null
   categories: CategoryConfig[]
   onSubmit: (checkIn: CheckIn) => void
   onAddActivity: (categoryId: string, label: string) => string | null
@@ -44,12 +51,17 @@ function fireConfetti() {
 }
 
 export function CheckInForm({
+  userId,
   categories,
   onSubmit,
   onAddActivity,
 }: CheckInFormProps) {
-  const [entries, setEntries] = useState(() => emptyEntries(categories))
-  const [notes, setNotes] = useState('')
+  const [entries, setEntries] = useState(
+    () => applyCheckInDraft(categories, loadCheckInDraft(userId)).entries,
+  )
+  const [notes, setNotes] = useState(
+    () => applyCheckInDraft(categories, loadCheckInDraft(userId)).notes,
+  )
   const [savedFlash, setSavedFlash] = useState(false)
 
   useEffect(() => {
@@ -62,8 +74,18 @@ export function CheckInForm({
     })
   }, [categories])
 
+  useEffect(() => {
+    saveCheckInDraft(userId, { entries, notes })
+  }, [userId, entries, notes])
+
   function updateEntry(id: string, entry: CategoryEntry) {
     setEntries((prev) => ({ ...prev, [id]: entry }))
+  }
+
+  function resetForm() {
+    setEntries(emptyEntries(categories))
+    setNotes('')
+    clearCheckInDraft(userId)
   }
 
   function handleSubmit(e: FormEvent) {
@@ -89,8 +111,7 @@ export function CheckInForm({
     })
 
     fireConfetti()
-    setEntries(emptyEntries(categories))
-    setNotes('')
+    resetForm()
     setSavedFlash(true)
     window.setTimeout(() => setSavedFlash(false), 1800)
   }
@@ -140,10 +161,7 @@ export function CheckInForm({
         <button
           type="button"
           className="btn btn-ghost"
-          onClick={() => {
-            setEntries(emptyEntries(categories))
-            setNotes('')
-          }}
+          onClick={resetForm}
         >
           Reset
         </button>
