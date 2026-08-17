@@ -1,14 +1,7 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useState, type FormEvent } from 'react'
 import confetti from 'canvas-confetti'
 import { v4 as uuidv4 } from 'uuid'
 import {
-  applyCheckInDraft,
-  clearCheckInDraft,
-  loadCheckInDraft,
-  saveCheckInDraft,
-} from '../storage'
-import {
-  emptyEntries,
   hasAnyData,
   type CategoryConfig,
   type CategoryEntry,
@@ -17,8 +10,12 @@ import {
 import { CategorySlider } from './CategorySlider'
 
 interface CheckInFormProps {
-  userId: string | null
   categories: CategoryConfig[]
+  entries: Record<string, CategoryEntry>
+  notes: string
+  onEntryChange: (categoryId: string, entry: CategoryEntry) => void
+  onNotesChange: (notes: string) => void
+  onReset: () => void
   onSubmit: (checkIn: CheckIn) => void
   onAddActivity: (categoryId: string, label: string) => string | null
 }
@@ -51,42 +48,17 @@ function fireConfetti() {
 }
 
 export function CheckInForm({
-  userId,
   categories,
+  entries,
+  notes,
+  onEntryChange,
+  onNotesChange,
+  onReset,
   onSubmit,
   onAddActivity,
 }: CheckInFormProps) {
-  const [entries, setEntries] = useState(
-    () => applyCheckInDraft(categories, loadCheckInDraft(userId)).entries,
-  )
-  const [notes, setNotes] = useState(
-    () => applyCheckInDraft(categories, loadCheckInDraft(userId)).notes,
-  )
   const [savedFlash, setSavedFlash] = useState(false)
-
-  useEffect(() => {
-    setEntries((prev) => {
-      const next = emptyEntries(categories)
-      for (const cat of categories) {
-        if (prev[cat.id]) next[cat.id] = prev[cat.id]
-      }
-      return next
-    })
-  }, [categories])
-
-  useEffect(() => {
-    saveCheckInDraft(userId, { entries, notes })
-  }, [userId, entries, notes])
-
-  function updateEntry(id: string, entry: CategoryEntry) {
-    setEntries((prev) => ({ ...prev, [id]: entry }))
-  }
-
-  function resetForm() {
-    setEntries(emptyEntries(categories))
-    setNotes('')
-    clearCheckInDraft(userId)
-  }
+  const canSubmit = hasAnyData(entries, notes)
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault()
@@ -111,12 +83,10 @@ export function CheckInForm({
     })
 
     fireConfetti()
-    resetForm()
+    onReset()
     setSavedFlash(true)
     window.setTimeout(() => setSavedFlash(false), 1800)
   }
-
-  const canSubmit = hasAnyData(entries, notes)
 
   return (
     <form className="checkin-form" onSubmit={handleSubmit}>
@@ -128,10 +98,16 @@ export function CheckInForm({
             have something to log.
           </p>
         </div>
-        {savedFlash && (
+        {savedFlash ? (
           <span className="save-toast" role="status">
             Saved
           </span>
+        ) : (
+          canSubmit && (
+            <span className="draft-hint" role="status">
+              Draft saved
+            </span>
+          )
         )}
       </header>
 
@@ -141,7 +117,7 @@ export function CheckInForm({
             key={cat.id}
             category={cat}
             entry={entries[cat.id] ?? emptyEntryFallback()}
-            onChange={(entry) => updateEntry(cat.id, entry)}
+            onChange={(entry) => onEntryChange(cat.id, entry)}
             onAddActivity={onAddActivity}
           />
         ))}
@@ -152,17 +128,13 @@ export function CheckInForm({
         <textarea
           rows={3}
           value={notes}
-          onChange={(e) => setNotes(e.target.value)}
+          onChange={(e) => onNotesChange(e.target.value)}
           placeholder="Anything else about this check-in…"
         />
       </label>
 
       <div className="form-actions">
-        <button
-          type="button"
-          className="btn btn-ghost"
-          onClick={resetForm}
-        >
+        <button type="button" className="btn btn-ghost" onClick={onReset}>
           Reset
         </button>
         <button type="submit" className="btn btn-primary" disabled={!canSubmit}>

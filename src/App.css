@@ -157,6 +157,13 @@
   animation: toast-in 0.35s ease;
 }
 
+.draft-hint {
+  align-self: center;
+  color: var(--ink-muted);
+  font-weight: 600;
+  font-size: 0.8rem;
+}
+
 .category-stack {
   display: grid;
   grid-template-columns: 1fr;

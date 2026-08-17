@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { Activity, useCallback, useState } from 'react'
 import { v4 as uuidv4 } from 'uuid'
 import { nextActivityColor } from './chartUtils'
 import { AuthScreen } from './components/AuthScreen'
@@ -7,6 +7,7 @@ import { Dashboard } from './components/Dashboard'
 import { HistoryList } from './components/HistoryList'
 import { SettingsPanel } from './components/SettingsPanel'
 import { useAuth } from './hooks/useAuth'
+import { useCheckInDraft } from './hooks/useCheckInDraft'
 import { useCheckIns } from './hooks/useCheckIns'
 import { clearAccountCache } from './lib/cloudSync'
 import './App.css'
@@ -49,6 +50,10 @@ export default function App() {
     configured && status === 'signed-in' && !passwordRecovery ? userId : null,
   )
   const [view, setView] = useState<View>('checkin')
+  const draftActive =
+    !configured || (status === 'signed-in' && !passwordRecovery)
+  const { entries, notes, updateEntry, updateNotes, resetDraft } =
+    useCheckInDraft(userId, settings.categories, draftActive)
 
   const addActivity = useCallback(
     (categoryId: string, label: string): string | null => {
@@ -189,15 +194,21 @@ export default function App() {
             </p>
           </div>
         )}
-        <div hidden={view !== 'checkin'}>
+        <Activity mode={view === 'checkin' ? 'visible' : 'hidden'}>
           <CheckInForm
-            key={userId ?? 'guest'}
-            userId={userId}
             categories={settings.categories}
-            onSubmit={add}
+            entries={entries}
+            notes={notes}
+            onEntryChange={updateEntry}
+            onNotesChange={updateNotes}
+            onReset={resetDraft}
+            onSubmit={(checkIn) => {
+              add(checkIn)
+              resetDraft()
+            }}
             onAddActivity={addActivity}
           />
-        </div>
+        </Activity>
         {view === 'trends' && (
           <Dashboard checkIns={checkIns} categories={settings.categories} />
         )}
