@@ -189,13 +189,15 @@ export default function App() {
             </p>
           </div>
         )}
-        {view === 'checkin' && (
+        <div hidden={view !== 'checkin'}>
           <CheckInForm
+            key={userId ?? 'guest'}
+            userId={userId}
             categories={settings.categories}
             onSubmit={add}
             onAddActivity={addActivity}
           />
-        )}
+        </div>
         {view === 'trends' && (
           <Dashboard checkIns={checkIns} categories={settings.categories} />
         )}

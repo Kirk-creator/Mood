@@ -1,4 +1,5 @@
 import {
+  CHECKIN_DRAFT_KEY,
   CHECKINS_KEY,
   DEFAULT_CATEGORIES,
   LEGACY_CHECKINS_KEY,
@@ -14,7 +15,12 @@ import type {
   CategoryEntry,
   CheckIn,
 } from './types'
-import { emptyEntry } from './types'
+import { emptyEntries, emptyEntry, hasAnyData } from './types'
+
+export interface CheckInDraft {
+  notes: string
+  entries: Record<string, CategoryEntry>
+}
 
 /** Active account for scoped localStorage keys. Null = guest/legacy keys. */
 let activeUserId: string | null = null
@@ -140,6 +146,66 @@ export function deleteCheckIn(id: string): CheckIn[] {
   const next = loadCheckIns().filter((item) => item.id !== id)
   saveCheckIns(next)
   return next
+}
+
+function draftKey(userId: string | null): string {
+  return userId ? `${CHECKIN_DRAFT_KEY}:${userId}` : CHECKIN_DRAFT_KEY
+}
+
+export function loadCheckInDraft(userId: string | null): CheckInDraft | null {
+  try {
+    const raw = localStorage.getItem(draftKey(userId))
+    if (!raw) return null
+    const parsed: unknown = JSON.parse(raw)
+    if (!isObject(parsed)) return null
+
+    const notes = typeof parsed.notes === 'string' ? parsed.notes : ''
+    const entries: Record<string, CategoryEntry> = {}
+    if (isObject(parsed.entries)) {
+      for (const [key, value] of Object.entries(parsed.entries)) {
+        entries[key] = normalizeEntry(value).entry
+      }
+    }
+
+    if (!hasAnyData(entries, notes)) return null
+    return { notes, entries }
+  } catch {
+    return null
+  }
+}
+
+export function saveCheckInDraft(
+  userId: string | null,
+  draft: CheckInDraft,
+): void {
+  if (!hasAnyData(draft.entries, draft.notes)) {
+    clearCheckInDraft(userId)
+    return
+  }
+  localStorage.setItem(draftKey(userId), JSON.stringify(draft))
+}
+
+export function clearCheckInDraft(userId: string | null): void {
+  localStorage.removeItem(draftKey(userId))
+}
+
+/** Overlay a saved draft onto the current category list. */
+export function applyCheckInDraft(
+  categories: CategoryConfig[],
+  draft: CheckInDraft | null,
+): CheckInDraft {
+  const entries = emptyEntries(categories)
+  if (!draft) return { notes: '', entries }
+  for (const cat of categories) {
+    const entry = draft.entries[cat.id]
+    if (entry) {
+      entries[cat.id] = {
+        value: entry.value,
+        activityIds: [...entry.activityIds],
+      }
+    }
+  }
+  return { notes: draft.notes, entries }
 }
 
 function normalizeActivityTag(raw: unknown): ActivityTag | null {
